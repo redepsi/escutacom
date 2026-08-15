@@ -1,53 +1,290 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Projeto Escuta Comunitária</title>
-
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: Arial, sans-serif;
-      background: #f5f7fb;
-      color: #172033;
-    }
-
-    .card {
-      width: min(90%, 500px);
-      padding: 40px;
-      background: white;
-      border: 1px solid #e5e9ef;
-      border-radius: 16px;
-      text-align: center;
-      box-shadow: 0 10px 30px rgba(0,0,0,.05);
-    }
-
-    h1 {
-      margin-bottom: 10px;
-      color: #315c8c;
-    }
-
-    p {
-      color: #667085;
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Projeto Escuta Comunitária">
+<title>Projeto Escuta Comunitária</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f7fb;color:#172033}
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.login-card{width:min(420px,100%);background:#fff;border:1px solid #e5e9ef;border-radius:16px;padding:34px;box-shadow:0 12px 35px rgba(23,32,51,.07)}
+.brand{text-align:center;margin-bottom:28px}.brand h1{margin:0;color:#315c8c;font-size:25px}.brand p{color:#667085;font-size:13px;margin:8px 0 0}
+.field{margin-bottom:16px}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}.field input{width:100%;padding:12px;border:1px solid #d5dbe4;border-radius:9px;font-size:14px;outline:none}.field input:focus{border-color:#315c8c}
+.btn{width:100%;border:0;background:#315c8c;color:#fff;padding:12px 14px;border-radius:9px;font-weight:700;cursor:pointer}.btn:disabled{opacity:.6;cursor:not-allowed}
+.message{display:none;margin-top:14px;padding:11px 12px;border-radius:8px;font-size:13px}.message.error{display:block;background:#fdecec;color:#b42318}.message.success{display:block;background:#e8f5ee;color:#2f855a}
+.app{display:none;min-height:100vh}.side{width:240px;background:#fff;border-right:1px solid #e5e9ef;padding:24px 14px}.logo{font-weight:800;font-size:18px;margin:0 12px 28px}.logo span{color:#315c8c}.nav button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:12px 14px;border-radius:9px;margin:4px 0;color:#475467;font-size:14px;cursor:pointer}.nav button.active{background:#e8f0f8;color:#315c8c;font-weight:700}
+.main{flex:1;padding:28px 36px;max-width:1550px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}.top h1{margin:0;font-size:26px}.profile{display:flex;align-items:center;gap:10px}.profile select{padding:10px 14px;border:1px solid #d5dbe4;border-radius:9px;background:#fff;font-weight:700}.user{background:#fff;border:1px solid #e5e9ef;padding:10px 14px;border-radius:9px;font-size:13px}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}.card,.panel,.hero{background:#fff;border:1px solid #e5e9ef;border-radius:12px}.card{padding:18px}.card small{color:#667085}.card strong{display:block;font-size:26px;margin-top:8px}.panel{padding:20px;margin-bottom:20px}.panel h2{font-size:17px;margin:0 0 16px}.hero{padding:22px;margin-bottom:20px}.hero h2{margin:0 0 6px}.hero p{margin:0;color:#667085}.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px}.toolbar .right{margin-left:auto;display:flex;gap:8px}.action{border:0;background:#315c8c;color:#fff;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer}.secondary{background:#fff;color:#315c8c;border:1px solid #cbd6e2}.notice{padding:12px 14px;border-radius:8px;background:#fff5d8;color:#6b4b00;font-size:13px;margin-bottom:14px}.badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700}.green{background:#e8f5ee;color:#2f855a}.yellow{background:#fff5d8;color:#9a6700}.red{background:#fdecec;color:#b42318}.gray{background:#f1f3f6;color:#667085}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px;border-bottom:1px solid #e9edf2;font-size:13px}th{font-size:11px;color:#667085;background:#fafbfc}.hidden{display:none}
+@media(max-width:850px){.side{display:none}.main{padding:20px}.cards{grid-template-columns:repeat(2,1fr)}}
+</style>
 </head>
-
 <body>
 
-  <div class="card">
-    <h1>Projeto Escuta Comunitária</h1>
-    <p>O sistema está sendo preparado.</p>
+<div id="loginScreen" class="login-wrap">
+  <div class="login-card">
+    <div class="brand">
+      <h1>Projeto Escuta Comunitária</h1>
+      <p>Gestão de atendimentos psicológicos</p>
+    </div>
+    <form id="loginForm">
+      <div class="field">
+        <label for="email">E-mail</label>
+        <input id="email" type="email" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="password">Senha</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button id="loginButton" class="btn" type="submit">Entrar</button>
+      <div id="loginMessage" class="message"></div>
+    </form>
   </div>
+</div>
 
+<div id="app" class="app">
+  <aside class="side">
+    <div class="logo">Projeto <span>Escuta Comunitária</span></div>
+    <nav id="nav" class="nav"></nav>
+  </aside>
+  <main class="main">
+    <div class="top">
+      <div>
+        <h1 id="title">Dashboard</h1>
+        <div style="font-size:12px;color:#667085;margin-top:5px">Projeto Escuta Comunitária</div>
+      </div>
+      <div class="profile">
+        <div class="user" id="userName">Carregando...</div>
+        <button id="logoutButton" class="action secondary">Sair</button>
+      </div>
+    </div>
+    <div id="content"></div>
+  </main>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://olovwleelrdxxiyxzgyh.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_WuvgwZg-HkrE09TNSimK_A_d5vc1jrw';
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+const loginScreen = document.getElementById('loginScreen');
+const app = document.getElementById('app');
+const loginForm = document.getElementById('loginForm');
+const loginButton = document.getElementById('loginButton');
+const loginMessage = document.getElementById('loginMessage');
+const logoutButton = document.getElementById('logoutButton');
+const userName = document.getElementById('userName');
+const content = document.getElementById('content');
+const nav = document.getElementById('nav');
+const title = document.getElementById('title');
+
+let currentProfile = null;
+let currentIntern = null;
+let currentPage = 'dashboard';
+
+const coordinatorPages = {
+  dashboard: `
+    <div class="cards">
+      <div class="card"><small>Atendimentos hoje</small><strong>12</strong></div>
+      <div class="card"><small>Confirmados</small><strong>8</strong></div>
+      <div class="card"><small>Aguardando confirmação</small><strong>2</strong></div>
+      <div class="card"><small>Não confirmados</small><strong>2</strong></div>
+    </div>
+    <section class="panel">
+      <div class="toolbar"><h2>Período acadêmico</h2><div class="right"><span class="badge green">2026.2 ativo</span><button class="action secondary">Iniciar 2027.1</button></div></div>
+      <p style="font-size:13px;color:#667085;margin:0">O sistema calcula a progressão dos semestres e apresenta as mudanças para uma única confirmação da coordenação.</p>
+    </section>
+    <section class="panel">
+      <h2>Previsão de atendimentos</h2>
+      <div class="notice">Esta é a primeira tela conectada ao Supabase. Os próximos módulos substituirão estes dados demonstrativos por dados reais.</div>
+      <table>
+        <tr><th>Horário</th><th>Paciente</th><th>Estagiário</th><th>Confirmação</th><th>Status</th></tr>
+        <tr><td>14:00</td><td>#00342</td><td>Ana Beatriz</td><td><span class="badge green">Confirmado</span></td><td>Agendado</td></tr>
+        <tr><td>15:00</td><td>#00501</td><td>João Pedro</td><td><span class="badge yellow">Aguardando</span></td><td>Agendado</td></tr>
+      </table>
+    </section>
+  `,
+  estagiarios: `
+    <section class="panel">
+      <div class="toolbar"><h2>Estagiários</h2><button class="action" style="margin-left:auto">+ Novo estagiário</button></div>
+      <p style="font-size:13px;color:#667085">Cadastro, edição, WhatsApp, período acadêmico, acesso e relatórios individuais serão conectados ao banco na próxima etapa.</p>
+      <table>
+        <tr><th>Nome</th><th>Matrícula</th><th>Período</th><th>WhatsApp</th><th>Acesso</th></tr>
+        <tr><td>Dawton Valentim</td><td>01595847</td><td>8º semestre</td><td>📱 WhatsApp</td><td><span class="badge green">Ativo</span></td></tr>
+        <tr><td>Ana Beatriz</td><td>20261234</td><td>8º semestre</td><td>📱 WhatsApp</td><td><span class="badge green">Ativo</span></td></tr>
+      </table>
+    </section>
+  `,
+  pacientes: `
+    <section class="panel">
+      <div class="toolbar"><h2>Pacientes</h2><button class="action" style="margin-left:auto">+ Novo paciente</button></div>
+      <p style="font-size:13px;color:#667085">Cadastro com inscrição, idade, gênero, nome opcional e disponibilidade opcional.</p>
+    </section>
+  `,
+  agendamentos: `
+    <section class="panel">
+      <div class="toolbar"><h2>Novo agendamento</h2></div>
+      <div class="notice">Cada atendimento ocupa 1 hora: 50 minutos de sessão + 10 minutos de intervalo. A sequência poderá ser criada para todo o semestre.</div>
+      <p style="font-size:13px;color:#667085">O próximo passo conectará esta tela às disponibilidades do paciente e do estagiário, bloqueios e conflitos.</p>
+      <button class="action">Novo agendamento</button>
+    </section>
+  `,
+  agenda: `
+    <section class="panel"><h2>Agenda</h2><p style="font-size:13px;color:#667085">Calendário integrado aos agendamentos reais será conectado na próxima etapa.</p></section>
+  `,
+  relatorio: `
+    <section class="hero"><h2>Relatórios</h2><p>Selecione um estagiário para visualizar horas, pacientes e atendimentos realizados.</p></section>
+  `,
+  solicitacoes: `
+    <section class="panel"><h2>Solicitações de cadastro</h2><div class="notice">Aqui aparecerão os estagiários que solicitaram cadastro e aguardam autorização.</div></section>
+  `
+};
+
+const internPages = {
+  dashboard: `
+    <section class="hero"><h2>Olá, ${'Dawton'}</h2><p>Você possui acesso de estagiário e de coordenador da agenda.</p></section>
+    <section class="panel"><h2>Meus próximos atendimentos</h2><div class="notice">As confirmações e os atendimentos serão carregados do banco nesta etapa.</div></section>
+  `,
+  disponibilidade: `
+    <section class="panel"><h2>Minha disponibilidade</h2><p style="font-size:13px;color:#667085">Aqui você poderá marcar sua disponibilidade semanal e bloquear horários específicos.</p></section>
+  `,
+  meus: `
+    <section class="panel"><h2>Meus agendamentos</h2><p style="font-size:13px;color:#667085">Aqui aparecerão seus atendimentos, confirmação e registro de presença/ausência.</p></section>
+  `
+};
+
+function showMessage(text, type='error') {
+  loginMessage.textContent = text;
+  loginMessage.className = 'message ' + type;
+}
+
+async function loadProfile(user) {
+  const { data: profile, error: profileError } = await db
+    .from('profiles')
+    .select('id, full_name, role')
+    .eq('id', user.id)
+    .single();
+
+  if (profileError) {
+    throw new Error('Sua conta entrou, mas o perfil do sistema não foi encontrado.');
+  }
+
+  currentProfile = profile;
+
+  const { data: intern } = await db
+    .from('interns')
+    .select('id, full_name, registration_number, current_semester, status, academic_period_id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  currentIntern = intern;
+  userName.textContent = `${profile.full_name} • ${profile.role === 'coordenador_agenda' ? 'Coordenação da agenda' : 'Estagiário'}`;
+
+  if (profile.role === 'coordenador_agenda') {
+    buildNav(Object.keys(coordinatorPages));
+    currentPage = 'dashboard';
+  } else {
+    buildNav(Object.keys(internPages));
+    currentPage = 'dashboard';
+  }
+
+  render();
+  loginScreen.style.display = 'none';
+  app.style.display = 'flex';
+}
+
+function buildNav(pages) {
+  const labels = {
+    dashboard:'Dashboard',agenda:'Agenda',estagiarios:'Estagiários',
+    pacientes:'Pacientes',agendamentos:'Agendamentos',relatorio:'Relatórios',
+    solicitacoes:'Solicitações',disponibilidade:'Minha disponibilidade',
+    meus:'Meus agendamentos'
+  };
+  nav.innerHTML = pages.map(p => `<button data-page="${p}">${labels[p] || p}</button>`).join('');
+  nav.querySelectorAll('button').forEach(button => {
+    button.addEventListener('click', () => {
+      currentPage = button.dataset.page;
+      render();
+    });
+  });
+}
+
+function render() {
+  const pages = currentProfile?.role === 'coordenador_agenda' ? coordinatorPages : internPages;
+  content.innerHTML = pages[currentPage] || pages.dashboard;
+  title.textContent = ({
+    dashboard:'Dashboard',agenda:'Agenda',estagiarios:'Estagiários',
+    pacientes:'Pacientes',agendamentos:'Agendamentos',relatorio:'Relatórios',
+    solicitacoes:'Solicitações',disponibilidade:'Minha disponibilidade',
+    meus:'Meus agendamentos'
+  })[currentPage] || 'Dashboard';
+
+  nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
+}
+
+loginForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  loginButton.disabled = true;
+  loginButton.textContent = 'Entrando...';
+  loginMessage.className = 'message';
+
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+
+  const { data, error } = await db.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    showMessage('Não foi possível entrar. Confira o e-mail e a senha.');
+    loginButton.disabled = false;
+    loginButton.textContent = 'Entrar';
+    return;
+  }
+
+  try {
+    await loadProfile(data.user);
+  } catch (e) {
+    await db.auth.signOut();
+    showMessage(e.message || 'Não foi possível carregar seu perfil.');
+  }
+
+  loginButton.disabled = false;
+  loginButton.textContent = 'Entrar';
+});
+
+logoutButton.addEventListener('click', async () => {
+  await db.auth.signOut();
+  app.style.display = 'none';
+  loginScreen.style.display = 'flex';
+  loginForm.reset();
+  showMessage('Você saiu do sistema.', 'success');
+});
+
+db.auth.onAuthStateChange(async (_event, session) => {
+  if (session?.user && !currentProfile) {
+    try {
+      await loadProfile(session.user);
+    } catch (e) {
+      await db.auth.signOut();
+      showMessage(e.message || 'Não foi possível carregar seu perfil.');
+    }
+  }
+});
+
+(async function init() {
+  const { data: { session } } = await db.auth.getSession();
+  if (session?.user) {
+    try {
+      await loadProfile(session.user);
+    } catch (e) {
+      await db.auth.signOut();
+      showMessage(e.message || 'Não foi possível carregar seu perfil.');
+    }
+  }
+})();
+</script>
 </body>
 </html>
