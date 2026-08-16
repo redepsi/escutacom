@@ -184,7 +184,7 @@ function escapeHtml(value) {
 }
 
 const registrationRequestsPage = async () => {
-  content.innerHTML=`<section class="panel"><div class="toolbar"><h2>Solicitações de cadastro</h2></div><div id="reqLoading" class="notice">Carregando solicitações...</div><div id="reqWrap"></div></section>`;
+  content.innerHTML=`<section class="panel"><div class="toolbar"><h2>Solicitações de cadastro</h2></div><div class="notice">Ao autorizar, o sistema cria a conta do estagiário e envia um convite por e-mail. A operação é executada com segurança pela Edge Function do Supabase.</div><div id="reqLoading" class="notice">Carregando solicitações...</div><div id="reqWrap"></div></section>`;
   const loading=document.getElementById('reqLoading'),wrap=document.getElementById('reqWrap');
   const {data,error}=await db.from('intern_registration_requests').select('id,full_name,registration_number,whatsapp,semester,email,status,created_at').order('created_at',{ascending:false});
   if(error){loading.className='message error';loading.style.display='block';loading.textContent='Erro: '+error.message;return;}
@@ -196,8 +196,33 @@ const registrationRequestsPage = async () => {
   }).join('');
   wrap.innerHTML=`<div style="overflow:auto"><table><tr><th>Nome</th><th>Matrícula</th><th>Sem.</th><th>WhatsApp</th><th>E-mail</th><th>Status</th><th>Ações</th></tr>${rows||'<tr><td colspan="7">Nenhuma solicitação encontrada.</td></tr>'}</table></div>`;
   wrap.querySelectorAll('.authorize-request').forEach(btn=>btn.onclick=async()=>{
-    const {error:updateError}=await db.from('intern_registration_requests').update({status:'autorizado',reviewed_by:currentProfile.id,reviewed_at:new Date().toISOString()}).eq('id',btn.dataset.id);
-    if(updateError){alert('Não foi possível autorizar: '+updateError.message);return;}
+    if(!confirm('Autorizar este estagiário e criar a conta de acesso?')) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Autorizando...';
+
+    const { data, error } = await db.functions.invoke('autorizar-estagiario', {
+      body: { request_id: btn.dataset.id }
+    });
+
+    if(error){
+      let detail = error.message || 'Não foi possível autorizar.';
+      try {
+        const body = await error.context?.json?.();
+        if(body?.error) detail = body.error;
+      } catch (_) {}
+      alert('Não foi possível autorizar: ' + detail);
+      btn.disabled = false;
+      btn.textContent = 'Autorizar';
+      return;
+    }
+
+    if(data?.warning){
+      alert(data.warning);
+    } else {
+      alert(data?.message || 'Estagiário autorizado com sucesso. Um convite de acesso foi enviado por e-mail.');
+    }
+
     await registrationRequestsPage();
   });
 };
