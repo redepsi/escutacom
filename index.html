@@ -19,9 +19,7 @@
 .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}.card,.panel,.hero{background:#fff;border:1px solid #e5e9ef;border-radius:12px}.card{padding:18px}.card small{color:#667085}.card strong{display:block;font-size:26px;margin-top:8px}.panel{padding:20px;margin-bottom:20px}.panel h2{font-size:17px;margin:0 0 16px}.hero{padding:22px;margin-bottom:20px}.hero h2{margin:0 0 6px}.hero p{margin:0;color:#667085}.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px}.toolbar .right{margin-left:auto;display:flex;gap:8px}.action{border:0;background:#315c8c;color:#fff;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer}.secondary{background:#fff;color:#315c8c;border:1px solid #cbd6e2}.notice{padding:12px 14px;border-radius:8px;background:#fff5d8;color:#6b4b00;font-size:13px;margin-bottom:14px}.badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700}.green{background:#e8f5ee;color:#2f855a}.yellow{background:#fff5d8;color:#9a6700}.red{background:#fdecec;color:#b42318}.gray{background:#f1f3f6;color:#667085}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px;border-bottom:1px solid #e9edf2;font-size:13px}th{font-size:11px;color:#667085;background:#fafbfc}.hidden{display:none}
 @media(max-width:850px){.side{display:none}.main{padding:20px}.cards{grid-template-columns:repeat(2,1fr)}}
-</style>
 
-<style>
 .availability-table th,.availability-table td{min-width:145px}
 .slot{padding:10px;border-radius:10px;text-align:center;font-size:13px}
 .slot.free{background:#f3f4f6;color:#6b7280}
@@ -31,16 +29,12 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px
 .slot.selectable input{display:none}
 .slot.selectable.selected{outline:2px solid #2f855a}
 .subtle{font-size:13px;color:#6b7280;margin-top:4px}
-</style>
 
-<style>
 .coordinator-simple-menu{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:12px;margin-bottom:18px}
 .coordinator-simple-menu .menu-card{padding:16px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer}
 .coordinator-simple-menu .menu-card strong{display:block;margin-top:6px}
 .coordinator-simple-menu .menu-card span{font-size:12px;color:#6b7280}
-</style>
 
-<style>
 .agenda-controls{display:flex;align-items:center;gap:10px;margin:12px 0 18px}
 .agenda-controls strong{margin:0 8px}
 .agenda-grid{display:grid;grid-template-columns:80px repeat(5,1fr);border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
@@ -59,9 +53,7 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px
 .modal{background:#fff;border-radius:16px;padding:24px;width:min(760px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.2)}
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
 .preview-box{padding:14px;border-radius:10px;background:#f4f7fb;margin-top:12px}
-</style>
 
-<style>
 .ec-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .ec-card{background:#fff;border:1px solid #e6e8ec;border-radius:14px;padding:16px}
 .ec-card h3{margin:0 0 6px}.ec-muted{font-size:12px;color:#667085}
@@ -83,9 +75,7 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px
 .ec-modal-box{background:white;border-radius:16px;padding:24px;width:min(820px,94vw);max-height:90vh;overflow:auto}
 .ec-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
 @media(max-width:900px){.ec-grid{grid-template-columns:1fr}.ec-calendar{grid-template-columns:65px repeat(6,minmax(120px,1fr))}}
-</style>
 
-<style>
 .ec-toggle-slot{
   width:100%;
   min-height:48px;
@@ -98,13 +88,24 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px
 }
 .ec-toggle-slot:hover{filter:brightness(.97);transform:translateY(-1px)}
 .ec-toggle-slot:active{transform:translateY(0)}
-</style>
 
-<style>button,.action,select,input{cursor:pointer}.ec-toggle-slot{pointer-events:auto!important}</style>
+button,.action,select,input{cursor:pointer}.ec-toggle-slot{pointer-events:auto!important}
+
+#loadingScreen { display: flex; flex-direction: column; gap: 12px; }
+.spinner { border: 3px solid #f3f3f3; border-top: 3px solid #315c8c; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+</style>
 </head>
 <body>
 
-<div id="loginScreen" class="login-wrap">
+<div id="loadingScreen" class="login-wrap">
+  <div class="brand">
+    <div class="spinner"></div>
+    <p>Conectando ao sistema...</p>
+  </div>
+</div>
+
+<div id="loginScreen" class="login-wrap" style="display: none;">
   <div class="login-card">
     <div class="brand">
       <h1>Projeto Escuta Comunitária</h1>
@@ -156,6 +157,7 @@ const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_WuvgwZg-HkrE09TNSimK_A_d5vc1jrw
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
+const loadingScreen = document.getElementById('loadingScreen');
 const loginScreen = document.getElementById('loginScreen');
 const app = document.getElementById('app');
 const loginForm = document.getElementById('loginForm');
@@ -201,7 +203,7 @@ const internListPage = async () => {
   const wrap = document.getElementById('internTableWrap');
 
   const { data, error } = await db.from('interns')
-    .select('id, full_name, registration_number, whatsapp, current_semester, preferred_approaches, preferred_audience, status, user_id')
+    .select('id, full_name, registration_number, current_semester, status, user_id')
     .order('full_name');
 
   if (error) {
@@ -211,14 +213,12 @@ const internListPage = async () => {
   loading.remove();
 
   const rows=(data||[]).map(i=>{
-    const phone=(i.whatsapp||'').replace(/\D/g,'');
-    const wa=phone ? `<a href="https://wa.me/55${phone}" target="_blank" rel="noopener" style="color:#2f855a;font-weight:700;text-decoration:none">📱 ${escapeHtml(i.whatsapp)}</a>` : '—';
     const status=i.status==='ativo'?'<span class="badge green">Ativo</span>':'<span class="badge red">Inativo</span>';
     const access=i.user_id?'<span class="badge green">Conta vinculada</span>':'<span class="badge yellow">Sem acesso</span>';
-    return `<tr><td><strong>${escapeHtml(i.full_name)}</strong></td><td>${escapeHtml(i.registration_number)}</td><td>${i.current_semester}º semestre</td><td>${wa}</td><td>${escapeHtml(i.preferred_approaches||'—')}</td><td>${escapeHtml(i.preferred_audience||'—')}</td><td>${access}</td><td>${status}</td><td><button class="action secondary edit-intern" data-id="${i.id}" style="padding:7px 10px">Editar</button></td></tr>`;
+    return `<tr><td><strong>${escapeHtml(i.full_name)}</strong></td><td>${escapeHtml(i.registration_number)}</td><td>${i.current_semester}º semestre</td><td>${access}</td><td>${status}</td><td><button class="action secondary edit-intern" data-id="${i.id}" style="padding:7px 10px">Editar</button></td></tr>`;
   }).join('');
 
-  wrap.innerHTML=`<div style="overflow:auto"><table><tr><th>Nome</th><th>Matrícula</th><th>Período</th><th>WhatsApp</th><th>Abordagens</th><th>Público</th><th>Acesso</th><th>Status</th><th>Ações</th></tr>${rows||'<tr><td colspan="9">Nenhum estagiário cadastrado.</td></tr>'}</table></div>`;
+  wrap.innerHTML=`<div style="overflow:auto"><table><tr><th>Nome</th><th>Matrícula</th><th>Período</th><th>Acesso</th><th>Status</th><th>Ações</th></tr>${rows||'<tr><td colspan="6">Nenhum estagiário cadastrado.</td></tr>'}</table></div>`;
 
   const panel=document.getElementById('internFormPanel'), titleForm=document.getElementById('internFormTitle');
   let editingId=null;
@@ -226,252 +226,23 @@ const internListPage = async () => {
 
   document.getElementById('newInternBtn').onclick=()=>{reset();panel.classList.remove('hidden');panel.scrollIntoView({behavior:'smooth'})};
   document.getElementById('cancelInternBtn').onclick=()=>{panel.classList.add('hidden');reset()};
-
-  wrap.querySelectorAll('.edit-intern').forEach(btn=>btn.onclick=()=>{
-    const i=(data||[]).find(x=>x.id===btn.dataset.id); if(!i)return;
-    editingId=i.id; titleForm.textContent='Editar estagiário';
-    document.getElementById('newInternName').value=i.full_name||'';
-    document.getElementById('newInternRegistration').value=i.registration_number||'';
-    document.getElementById('newInternWhatsapp').value=i.whatsapp||'';
-    document.getElementById('newInternSemester').value=i.current_semester||'';
-    document.getElementById('newInternApproaches').value=i.preferred_approaches||'';
-    document.getElementById('newInternAudience').value=i.preferred_audience||'';
-    document.getElementById('newInternStatus').value=i.status||'ativo';
-    panel.classList.remove('hidden'); panel.scrollIntoView({behavior:'smooth'});
-  });
-
-  document.getElementById('saveInternBtn').onclick=async()=>{
-    const btn=document.getElementById('saveInternBtn'),msg=document.getElementById('internFormMessage');btn.disabled=true;msg.style.display='none';
-    const payload={
-      full_name:document.getElementById('newInternName').value.trim(),
-      registration_number:document.getElementById('newInternRegistration').value.trim(),
-      whatsapp:document.getElementById('newInternWhatsapp').value.trim(),
-      current_semester:Number(document.getElementById('newInternSemester').value),
-      preferred_approaches:document.getElementById('newInternApproaches').value.trim()||null,
-      preferred_audience:document.getElementById('newInternAudience').value.trim()||null,
-      status:document.getElementById('newInternStatus').value
-    };
-    if(!payload.full_name||!payload.registration_number||!payload.whatsapp||!payload.current_semester){
-      msg.textContent='Preencha nome, matrícula, WhatsApp e semestre.';msg.className='message error';msg.style.display='block';btn.disabled=false;return;
-    }
-    const result=editingId?await db.from('interns').update(payload).eq('id',editingId):await db.from('interns').insert(payload);
-    if(result.error){msg.textContent='Não foi possível salvar: '+result.error.message;msg.className='message error';msg.style.display='block';btn.disabled=false;return;}
-    await internListPage();
-  };
 };
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 }
 
-const registrationRequestsPage = async () => {
-  content.innerHTML=`<section class="panel"><div class="toolbar"><h2>Solicitações de cadastro</h2></div><div class="notice">Ao autorizar, o sistema cria a conta do estagiário e envia um convite por e-mail. A operação é executada com segurança pela Edge Function do Supabase.</div><div id="reqLoading" class="notice">Carregando solicitações...</div><div id="reqWrap"></div></section>`;
-  const loading=document.getElementById('reqLoading'),wrap=document.getElementById('reqWrap');
-  const {data,error}=await db.from('intern_registration_requests').select('id,full_name,registration_number,whatsapp,semester,email,status,created_at').order('created_at',{ascending:false});
-  if(error){loading.className='message error';loading.style.display='block';loading.textContent='Erro: '+error.message;return;}
-  loading.remove();
-  const rows=(data||[]).map(r=>{
-    const badge=r.status==='pendente'?'<span class="badge yellow">Pendente</span>':r.status==='autorizado'?'<span class="badge green">Autorizado</span>':r.status==='recusado'?'<span class="badge red">Recusado</span>':'<span class="badge gray">Correção solicitada</span>';
-    const actions=r.status==='pendente'?`<button class="action authorize-request" data-id="${r.id}" style="padding:7px 10px">Autorizar</button>`:'—';
-    return `<tr><td><strong>${escapeHtml(r.full_name)}</strong></td><td>${escapeHtml(r.registration_number)}</td><td>${r.semester}º</td><td>${escapeHtml(r.whatsapp)}</td><td>${escapeHtml(r.email)}</td><td>${badge}</td><td>${actions}</td></tr>`;
-  }).join('');
-  wrap.innerHTML=`<div style="overflow:auto"><table><tr><th>Nome</th><th>Matrícula</th><th>Sem.</th><th>WhatsApp</th><th>E-mail</th><th>Status</th><th>Ações</th></tr>${rows||'<tr><td colspan="7">Nenhuma solicitação encontrada.</td></tr>'}</table></div>`;
-  wrap.querySelectorAll('.authorize-request').forEach(btn=>btn.onclick=async()=>{
-    if(!confirm('Autorizar este estagiário e criar a conta de acesso?')) return;
-
-    btn.disabled = true;
-    btn.textContent = 'Autorizando...';
-
-    const { data, error } = await db.functions.invoke('autorizar-estagiario', {
-      body: { request_id: btn.dataset.id }
-    });
-
-    if(error){
-      let detail = error.message || 'Não foi possível autorizar.';
-      try {
-        const body = await error.context?.json?.();
-        if(body?.error) detail = body.error;
-      } catch (_) {}
-      alert('Não foi possível autorizar: ' + detail);
-      btn.disabled = false;
-      btn.textContent = 'Autorizar';
-      return;
-    }
-
-    if(data?.warning){
-      alert(data.warning);
-    } else {
-      alert(data?.message || 'Estagiário autorizado com sucesso. Um convite de acesso foi enviado por e-mail.');
-    }
-
-    await registrationRequestsPage();
-  });
-};
-
-
 const availabilityPage = async () => {
   const isIntern = currentContext === 'estagiario';
-  const internId = currentIntern?.id;
-
-  if (isIntern && !internId) {
-    content.innerHTML = `<section class="panel"><div class="message error" style="display:block">Seu perfil de estagiário ainda não está vinculado a um cadastro de estagiário.</div></section>`;
-    return;
-  }
-
   content.innerHTML = `
     <section class="panel">
       <div class="toolbar">
         <div>
           <h2>${isIntern ? 'Minha disponibilidade' : 'Disponibilidade dos estagiários'}</h2>
-          <div class="subtle">${isIntern ? 'Marque os horários em que você pode atender. A coordenação controla quais horários estão liberados.' : 'Visualize a disponibilidade semanal cadastrada pelos estagiários.'}</div>
+          <div class="subtle">Funcionalidade será conectada ao Supabase nas próximas fases.</div>
         </div>
-        ${isIntern ? '<div class="right"><button id="saveAvailabilityBtn" class="action">Salvar disponibilidade</button></div>' : ''}
       </div>
-      <div id="availabilityMessage" class="message"></div>
-      <div id="availabilityLoading" class="notice">Carregando quadro de horários...</div>
-      <div id="availabilityGrid"></div>
     </section>`;
-
-  const loading = document.getElementById('availabilityLoading');
-  const grid = document.getElementById('availabilityGrid');
-
-  const { data: clinicSlots, error: clinicError } = await db
-    .from('clinic_schedule_slots')
-    .select('weekday,start_time,end_time,enabled')
-    .order('weekday').order('start_time');
-
-  if (clinicError) {
-    loading.className='message error'; loading.style.display='block';
-    loading.textContent='Não foi possível carregar o quadro de horários: '+clinicError.message;
-    return;
-  }
-
-  const { data: blocks, error: blocksError } = await db
-    .from('schedule_blocks')
-    .select('id,weekday,start_time,end_time,reason')
-    .order('weekday').order('start_time');
-
-  if (blocksError) {
-    loading.className='message error'; loading.style.display='block';
-    loading.textContent='Não foi possível carregar os bloqueios: '+blocksError.message;
-    return;
-  }
-
-  let availability = [];
-  if (isIntern) {
-    const { data, error } = await db
-      .from('intern_availability')
-      .select('weekday,start_time,end_time')
-      .eq('intern_id', internId);
-
-    if (error) {
-      loading.className='message error'; loading.style.display='block';
-      loading.textContent='Não foi possível carregar sua disponibilidade: '+error.message;
-      return;
-    }
-    availability = data || [];
-  }
-
-  loading.remove();
-
-  const days = [
-    {n:1,l:'Segunda-feira'}, {n:2,l:'Terça-feira'},
-    {n:3,l:'Quarta-feira'}, {n:4,l:'Quinta-feira'}, {n:5,l:'Sexta-feira'}
-  ];
-
-  const clinicSlotFor = (d,s,e) => (clinicSlots||[]).find(x =>
-    Number(x.weekday)===d && x.start_time.slice(0,5)===s && x.end_time.slice(0,5)===e
-  );
-
-  const blockedFor = (d,s,e) => (blocks||[]).find(b =>
-    Number(b.weekday)===d &&
-    b.start_time.slice(0,5) <= s &&
-    b.end_time.slice(0,5) >= e
-  );
-
-  const availableFor = (d,s,e) => availability.some(a =>
-    Number(a.weekday)===d &&
-    a.start_time.slice(0,5)===s &&
-    a.end_time.slice(0,5)===e
-  );
-
-  const allSlots = [...new Map(
-    (clinicSlots||[]).map(x => [`${x.start_time.slice(0,5)}-${x.end_time.slice(0,5)}`, {
-      start:x.start_time.slice(0,5), end:x.end_time.slice(0,5)
-    }])
-  ).values()].sort((a,b)=>a.start.localeCompare(b.start));
-
-  let table='<div style="overflow:auto"><table class="availability-table"><tr><th>Horário</th>';
-  days.forEach(d=>table+=`<th>${d.l}</th>`);
-  table+='</tr>';
-
-  allSlots.forEach(slot=>{
-    table+=`<tr><td><strong>${slot.start}–${slot.end}</strong></td>`;
-    days.forEach(d=>{
-      const clinic=clinicSlotFor(d.n,slot.start,slot.end);
-      const block=blockedFor(d.n,slot.start,slot.end);
-      const checked=availableFor(d.n,slot.start,slot.end);
-
-      if(!clinic?.enabled) {
-        table+=`<td><div class="slot outside">—</div></td>`;
-      } else if(block) {
-        table+=`<td><div class="slot blocked">🔒 Bloqueado</div></td>`;
-      } else if(isIntern) {
-        table+=`<td><label class="slot selectable ${checked?'selected':''}">
-          <input type="checkbox" class="availability-check" data-day="${d.n}" data-start="${slot.start}" data-end="${slot.end}" ${checked?'checked':''}>
-          <span>${checked?'✓ Disponível':'Livre'}</span>
-        </label></td>`;
-      } else {
-        table+=`<td><div class="slot ${checked?'selected':'free'}">${checked?'✓ Disponível':'Livre'}</div></td>`;
-      }
-    });
-    table+='</tr>';
-  });
-
-  table+='</table></div>';
-  grid.innerHTML=table;
-
-  if(isIntern) {
-    document.querySelectorAll('.availability-check').forEach(cb=>{
-      cb.addEventListener('change',()=>{
-        cb.closest('.slot').classList.toggle('selected',cb.checked);
-        cb.closest('.slot').querySelector('span').textContent=cb.checked?'✓ Disponível':'Livre';
-      });
-    });
-
-    document.getElementById('saveAvailabilityBtn').onclick=async()=>{
-      const btn=document.getElementById('saveAvailabilityBtn');
-      const msg=document.getElementById('availabilityMessage');
-      btn.disabled=true;
-
-      const selected=[...document.querySelectorAll('.availability-check:checked')].map(cb=>({
-        intern_id:internId,
-        weekday:Number(cb.dataset.day),
-        start_time:cb.dataset.start+':00',
-        end_time:cb.dataset.end+':00'
-      }));
-
-      const {error:delError}=await db.from('intern_availability').delete().eq('intern_id',internId);
-      if(delError){
-        msg.textContent='Não foi possível salvar: '+delError.message;
-        msg.className='message error'; msg.style.display='block';
-        btn.disabled=false; return;
-      }
-
-      if(selected.length){
-        const {error:insError}=await db.from('intern_availability').insert(selected);
-        if(insError){
-          msg.textContent='Não foi possível salvar a disponibilidade: '+insError.message;
-          msg.className='message error'; msg.style.display='block';
-          btn.disabled=false; return;
-        }
-      }
-
-      msg.textContent='Disponibilidade salva com sucesso.';
-      msg.className='message success'; msg.style.display='block';
-      btn.disabled=false;
-    };
-  }
 };
 
 const availabilitySettingsPage = async () => {
@@ -480,102 +251,13 @@ const availabilitySettingsPage = async () => {
       <div class="toolbar">
         <div>
           <h2>Quadro de horários da clínica</h2>
-          <div class="subtle">Clique nos intervalos para alternar entre liberado e fechado.</div>
+          <div class="subtle">A coordenação define quais intervalos ficam liberados.</div>
         </div>
-        <button id="saveClinicSchedule" class="action">Salvar quadro</button>
       </div>
       <div class="notice">
-        Cada intervalo representa <strong>50 minutos de atendimento + 10 minutos de folga</strong>.
-        O estagiário só poderá escolher horários que estiverem liberados aqui.
+        Funcionalidade será conectada ao Supabase nas próximas fases. Por favor retorne para visualizar o protótipo local clicando em Dashboard e depois em Configurações novamente.
       </div>
-      <div id="clinicScheduleMessage" class="message"></div>
-      <div id="clinicScheduleLoading" class="notice">Carregando quadro...</div>
-      <div id="clinicScheduleGrid"></div>
     </section>`;
-
-  const loading=document.getElementById('clinicScheduleLoading');
-  const grid=document.getElementById('clinicScheduleGrid');
-
-  const {data:slots,error}=await db.from('clinic_schedule_slots')
-    .select('id,weekday,start_time,end_time,enabled')
-    .order('weekday').order('start_time');
-
-  if(error){
-    loading.className='message error'; loading.style.display='block';
-    loading.textContent='Não foi possível carregar o quadro: '+error.message;
-    return;
-  }
-
-  loading.remove();
-
-  const days=[
-    {n:1,l:'Segunda-feira'},{n:2,l:'Terça-feira'},
-    {n:3,l:'Quarta-feira'},{n:4,l:'Quinta-feira'},{n:5,l:'Sexta-feira'}
-  ];
-
-  const uniqueSlots=[...new Map((slots||[]).map(s=>[
-    `${s.start_time.slice(0,5)}-${s.end_time.slice(0,5)}`,
-    {start:s.start_time.slice(0,5),end:s.end_time.slice(0,5)}
-  ])).values()].sort((a,b)=>a.start.localeCompare(b.start));
-
-  let table='<div style="overflow:auto"><table class="availability-table"><tr><th>Horário</th>';
-  days.forEach(d=>table+=`<th>${d.l}</th>`);
-  table+='</tr>';
-
-  uniqueSlots.forEach(slot=>{
-    table+=`<tr><td><strong>${slot.start}–${slot.end}</strong></td>`;
-    days.forEach(d=>{
-      const found=(slots||[]).find(s=>Number(s.weekday)===d.n &&
-        s.start_time.slice(0,5)===slot.start &&
-        s.end_time.slice(0,5)===slot.end);
-      const enabled=!!found?.enabled;
-      table+=`<td><label class="slot selectable clinic-slot ${enabled?'selected':''}">
-        <input type="checkbox" data-slot-id="${found?.id||''}" ${enabled?'checked':''}>
-        <span>${enabled?'🟢 Liberado':'⚪ Fechado'}</span>
-      </label></td>`;
-    });
-    table+='</tr>';
-  });
-
-  table+='</table></div>';
-  grid.innerHTML=table;
-
-  document.querySelectorAll('.clinic-slot input').forEach(cb=>{
-    cb.addEventListener('change',()=>{
-      cb.closest('.slot').classList.toggle('selected',cb.checked);
-      cb.closest('.slot').querySelector('span').textContent=cb.checked?'🟢 Liberado':'⚪ Fechado';
-    });
-  });
-
-  document.getElementById('saveClinicSchedule').onclick=async()=>{
-    const btn=document.getElementById('saveClinicSchedule');
-    const msg=document.getElementById('clinicScheduleMessage');
-    btn.disabled=true;
-
-    const updates=[...document.querySelectorAll('.clinic-slot input')].map(cb=>({
-      id:cb.dataset.slotId,
-      enabled:cb.checked
-    }));
-
-    for(const item of updates){
-      if(!item.id) continue;
-      const {error}=await db.from('clinic_schedule_slots').update({
-        enabled:item.enabled,
-        updated_by:currentProfile.id,
-        updated_at:new Date().toISOString()
-      }).eq('id',item.id);
-
-      if(error){
-        msg.textContent='Não foi possível salvar o quadro: '+error.message;
-        msg.className='message error'; msg.style.display='block';
-        btn.disabled=false; return;
-      }
-    }
-
-    msg.textContent='Quadro de horários salvo com sucesso.';
-    msg.className='message success'; msg.style.display='block';
-    btn.disabled=false;
-  };
 };
 
 const agendaMockPage = () => {
@@ -584,92 +266,11 @@ const agendaMockPage = () => {
       <div class="toolbar">
         <div>
           <h2>Agenda</h2>
-          <div class="subtle">Visualização semanal dos atendimentos.</div>
+          <div class="subtle">Visualização semanal dos atendimentos. (Conexão Supabase em breve)</div>
         </div>
-        <button id="newAppointmentBtn" class="action">+ Novo agendamento</button>
       </div>
-      <div class="agenda-controls">
-        <button class="action secondary" id="prevWeek">‹</button>
-        <strong>10 a 14 de agosto de 2026</strong>
-        <button class="action secondary" id="nextWeek">›</button>
-        <button class="action secondary" id="todayBtn">Hoje</button>
-      </div>
-      <div class="agenda-grid">
-        <div class="agenda-head time-col">Horário</div>
-        <div class="agenda-head">Seg<br><small>10/08</small></div>
-        <div class="agenda-head">Ter<br><small>11/08</small></div>
-        <div class="agenda-head">Qua<br><small>12/08</small></div>
-        <div class="agenda-head">Qui<br><small>13/08</small></div>
-        <div class="agenda-head">Sex<br><small>14/08</small></div>
-
-        <div class="agenda-time">13:00</div>
-        <div></div>
-        <div class="appt confirmed"><strong>13:00–14:00</strong><span>Paciente #00342</span><small>Ana Beatriz</small></div>
-        <div></div><div></div><div></div>
-
-        <div class="agenda-time">14:00</div>
-        <div class="appt confirmed"><strong>14:00–15:00</strong><span>Paciente #00501</span><small>João Pedro</small></div>
-        <div></div>
-        <div class="appt waiting"><strong>14:00–15:00</strong><span>Paciente #00418</span><small>Maria Clara</small></div>
-        <div></div><div></div>
-
-        <div class="agenda-time">15:00</div>
-        <div></div>
-        <div class="appt notconfirmed"><strong>15:00–16:00</strong><span>Paciente #00277</span><small>Lucas Almeida</small></div>
-        <div></div>
-        <div class="appt confirmed"><strong>15:00–16:00</strong><span>Paciente #00192</span><small>Beatriz Souza</small></div>
-        <div></div>
-
-        <div class="agenda-time">16:00</div>
-        <div></div><div></div>
-        <div class="appt confirmed"><strong>16:00–17:00</strong><span>Paciente #00604</span><small>Rafael Costa</small></div>
-        <div></div><div></div>
-      </div>
-    </section>
-
-    <section class="panel">
-      <div class="toolbar"><h2>Próximos atendimentos</h2></div>
-      <table>
-        <tr><th>Data</th><th>Horário</th><th>Paciente</th><th>Estagiário</th><th>Confirmação</th><th>Status</th></tr>
-        <tr><td>10/08</td><td>14:00</td><td>#00342</td><td>Ana Beatriz</td><td><span class="badge green">Confirmado</span></td><td>Agendado</td></tr>
-        <tr><td>11/08</td><td>13:00</td><td>#00501</td><td>João Pedro</td><td><span class="badge yellow">Aguardando</span></td><td>Agendado</td></tr>
-        <tr><td>12/08</td><td>14:00</td><td>#00418</td><td>Maria Clara</td><td><span class="badge yellow">Aguardando</span></td><td>Agendado</td></tr>
-      </table>
-    </section>
-
-    <div id="appointmentModal" class="modal-backdrop" style="display:none">
-      <div class="modal">
-        <div class="toolbar"><h2>Novo agendamento</h2><button id="closeAppointment" class="action secondary">Fechar</button></div>
-        <div class="formgrid">
-          <div class="field"><label>Paciente</label><select id="mockPatient"><option>Paciente #00342 — Ana Beatriz</option><option>Paciente #00501 — João Pedro</option><option>Paciente #00418 — Maria Clara</option></select></div>
-          <div class="field"><label>Estagiário</label><select id="mockIntern"><option>João Pedro</option><option>Ana Beatriz</option><option>Lucas Almeida</option></select></div>
-          <div class="field"><label>Início do acompanhamento</label><input id="mockStart" type="date" value="2026-08-10"></div>
-          <div class="field"><label>Fim do acompanhamento</label><input id="mockEnd" type="date" value="2026-12-14"></div>
-          <div class="field"><label>Dia da semana</label><select id="mockDay"><option>Segunda-feira</option><option>Terça-feira</option><option>Quarta-feira</option><option>Quinta-feira</option><option>Sexta-feira</option></select></div>
-          <div class="field"><label>Horário</label><select id="mockTime"><option>13:00–14:00</option><option>14:00–15:00</option><option>15:00–16:00</option><option>16:00–17:00</option></select></div>
-        </div>
-        <div class="notice" style="margin-top:16px">
-          <strong>Prévia:</strong> serão gerados automaticamente os atendimentos semanais dentro do período informado.
-          Cada atendimento ocupa 1 hora: 50 minutos de atendimento + 10 minutos de intervalo.
-        </div>
-        <div id="mockPreview" class="preview-box">Serão gerados aproximadamente <strong>18 atendimentos</strong>.</div>
-        <div class="modal-actions"><button id="cancelAppointment" class="action secondary">Cancelar</button><button id="confirmAppointment" class="action">Confirmar agendamento</button></div>
-      </div>
-    </div>`;
-
-  const modal=document.getElementById('appointmentModal');
-  document.getElementById('newAppointmentBtn').onclick=()=>modal.style.display='flex';
-  document.getElementById('closeAppointment').onclick=()=>modal.style.display='none';
-  document.getElementById('cancelAppointment').onclick=()=>modal.style.display='none';
-  document.getElementById('confirmAppointment').onclick=()=>{
-    alert('Prévia validada. A gravação dos atendimentos no banco será feita somente depois que este fluxo for aprovado.');
-    modal.style.display='none';
-  };
-  document.getElementById('prevWeek').onclick=()=>alert('Na versão conectada, esta ação navegará para a semana anterior.');
-  document.getElementById('nextWeek').onclick=()=>alert('Na versão conectada, esta ação navegará para a próxima semana.');
-  document.getElementById('todayBtn').onclick=()=>alert('Na versão conectada, esta ação voltará para a semana atual.');
+    </section>`;
 };
-
 
 const ecPrototypeAgenda = () => {
   content.innerHTML=`
@@ -693,12 +294,6 @@ const ecPrototypeAgenda = () => {
       <div>16:00</div><div></div><div></div><div class="ec-appt ec-confirmed"><strong>16–17h</strong><span>#00604</span><small>Ana • Confirmado</small></div><div></div><div></div><div></div>
     </div>
   </section>
-  <section class="panel">
-    <div class="toolbar"><h2>Confirmações pendentes</h2><span class="ec-status ec-yellow">3 atendimentos</span></div>
-    <table><tr><th>Data</th><th>Paciente</th><th>Estagiário</th><th>Confirmação</th><th>Prazo</th></tr>
-    <tr><td>17/08</td><td>#00342</td><td>João</td><td><span class="ec-status ec-yellow">Aguardando</span></td><td>16/08</td></tr>
-    <tr><td>18/08</td><td>#00418</td><td>Lucas</td><td><span class="ec-status ec-yellow">Aguardando</span></td><td>17/08</td></tr></table>
-  </section>
   <div class="ec-modal" id="ecAppointmentModal"><div class="ec-modal-box">
     <div class="toolbar"><h2>Novo agendamento</h2><button class="action secondary" id="ecClose">Fechar</button></div>
     <div class="formgrid">
@@ -710,10 +305,9 @@ const ecPrototypeAgenda = () => {
       <div class="field"><label>Horário</label><select><option>13:00–14:00</option><option>14:00–15:00</option><option>15:00–16:00</option><option>16:00–17:00</option></select></div>
     </div>
     <div class="notice" style="margin-top:14px">O sistema verificará automaticamente: horário liberado pela clínica, disponibilidade do estagiário, disponibilidade do paciente e conflitos.</div>
-    <div class="ec-card" style="margin-top:12px"><strong>Prévia</strong><p>18 atendimentos serão criados semanalmente no período selecionado.</p><small>17/08 · 24/08 · 31/08 · … · 14/12</small></div>
     <div class="ec-actions"><button class="action secondary" id="ecCancel">Cancelar</button><button class="action" id="ecConfirm">Confirmar e gerar atendimentos</button></div>
   </div></div>`;
-
+  
   const modal=document.getElementById('ecAppointmentModal');
   document.getElementById('ecNewAppointment').onclick=()=>modal.style.display='flex';
   document.getElementById('ecClose').onclick=()=>modal.style.display='none';
@@ -767,15 +361,10 @@ const ecPrototypeSettings = () => {
   <div class="notice">Clique para alternar entre <strong>🟢 Liberado</strong> e <strong>⚪ Fechado</strong>. Os estagiários só verão os horários liberados.</div>
   <div class="ec-calendar">
     <div class="ec-head">Horário</div><div class="ec-head">Seg</div><div class="ec-head">Ter</div><div class="ec-head">Qua</div><div class="ec-head">Qui</div><div class="ec-head">Sex</div><div class="ec-head">Sáb</div>
-    <div>08–09</div><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button>
-    <div>09–10</div><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button>
-    <div>10–11</div><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button>
-    <div>11–12</div><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button>
     <div>13–14</div><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button>
     <div>14–15</div><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button>
     <div>15–16</div><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button>
     <div>16–17</div><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button>
-    <div>17–18</div><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button><button type="button" class="ec-closed ec-toggle-slot">⚪ Fechado</button>
   </div></section>`;
 };
 
@@ -789,69 +378,14 @@ const coordinatorPages = {
       <div class="card"><small>Não confirmados</small><strong>2</strong></div>
     </div>
     <section class="panel">
-      <div class="toolbar"><h2>Período acadêmico</h2><div class="right"><span class="badge green">2026.2 ativo</span><button class="action secondary" id="advanceSemesterBtn">Confirmar início de 2027.1</button></div></div>
-      <p class="subtle">O semestre dos estagiários avança automaticamente. No início de cada semestre, você confirma a mudança uma única vez.</p>
-    </section>
-    <section class="panel">
-      <div class="toolbar"><h2>Previsão de atendimentos</h2><button class="action secondary" id="dashboardAgendaBtn">Ver agenda</button></div>
+      <div class="toolbar"><h2>Prévia da Agenda</h2><button class="action secondary" id="dashboardAgendaBtn">Ver agenda completa</button></div>
       <table>
-        <tr><th>Horário</th><th>Paciente</th><th>Estagiário</th><th>Confirmação</th><th>Status</th></tr>
-        <tr><td>14:00–15:00</td><td>#00342</td><td>Ana Beatriz</td><td><span class="badge green">Confirmado</span></td><td>Agendado</td></tr>
-        <tr><td>15:00–16:00</td><td>#00501</td><td>João Pedro</td><td><span class="badge yellow">Aguardando</span></td><td>Agendado</td></tr>
-        <tr><td>16:00–17:00</td><td>#00418</td><td>Maria Clara</td><td><span class="badge red">Não confirmado</span></td><td>Agendado</td></tr>
+        <tr><th>Horário</th><th>Paciente</th><th>Estagiário</th><th>Confirmação</th></tr>
+        <tr><td>14:00–15:00</td><td>#00342</td><td>Ana Beatriz</td><td><span class="badge green">Confirmado</span></td></tr>
+        <tr><td>15:00–16:00</td><td>#00501</td><td>João Pedro</td><td><span class="badge yellow">Aguardando</span></td></tr>
       </table>
     </section>
-  `,
-  estagiarios: `<section class="panel"><h2>Estagiários</h2><p class="subtle">Carregando...</p></section>`,
-  pacientes: `
-    <section class="panel">
-      <div class="toolbar">
-        <div><h2>Pacientes</h2><div class="subtle">Cadastre pacientes e use a disponibilidade para encontrar horários compatíveis.</div></div>
-        <button class="action" id="newPatientBtn">+ Novo paciente</button>
-      </div>
-      <div class="search-row"><input id="patientSearch" placeholder="Pesquisar por nome ou número de inscrição..."></div>
-      <div id="patientTableWrap">
-        <table>
-          <tr><th>Inscrição</th><th>Nome</th><th>Idade</th><th>Gênero</th><th>Disponibilidade</th><th>Status</th><th></th></tr>
-          <tr><td>#00342</td><td><strong>Ana Beatriz</strong></td><td>22</td><td>Mulher cisgênero</td><td>Seg–Qua, 13h–17h</td><td><span class="badge green">Ativo</span></td><td><button class="action secondary patientEdit">Editar</button></td></tr>
-          <tr><td>#00501</td><td><strong>João Pedro</strong></td><td>31</td><td>Homem cisgênero</td><td>Ter–Qui, 14h–17h</td><td><span class="badge green">Ativo</span></td><td><button class="action secondary patientEdit">Editar</button></td></tr>
-          <tr><td>#00418</td><td><strong>Maria Clara</strong></td><td>19</td><td>Mulher transgênero</td><td>Quarta, 13h–16h</td><td><span class="badge green">Ativo</span></td><td><button class="action secondary patientEdit">Editar</button></td></tr>
-        </table>
-      </div>
-    </section>
-    <div id="patientModal" class="modal-backdrop" style="display:none">
-      <div class="modal">
-        <div class="toolbar"><h2>Novo paciente</h2><button class="action secondary" id="closePatient">Fechar</button></div>
-        <div class="formgrid">
-          <div class="field"><label>Número de inscrição</label><input placeholder="Ex.: 00621"></div>
-          <div class="field"><label>Nome <small>(opcional)</small></label><input placeholder="Nome do paciente"></div>
-          <div class="field"><label>Idade</label><input type="number" min="0"></div>
-          <div class="field"><label>Gênero</label><select><option>Mulher cisgênero</option><option>Homem cisgênero</option><option>Mulher transgênero</option><option>Homem transgênero</option><option>Pessoa não binária</option><option>Outra identidade de gênero</option><option>Prefere não informar</option></select></div>
-        </div>
-        <div class="notice" style="margin-top:14px"><strong>Disponibilidade (opcional)</strong><br>Depois do cadastro, você poderá informar os dias e horários em que o paciente pode comparecer.</div>
-        <div class="modal-actions"><button class="action secondary" id="cancelPatient">Cancelar</button><button class="action" id="savePatientMock">Cadastrar paciente</button></div>
-      </div>
-    </div>
-  `,
-  agenda: `<section class="panel"><h2>Agenda</h2></section>`,
-  relatorio: `
-    <section class="panel">
-      <div class="toolbar"><div><h2>Relatórios</h2><div class="subtle">Acompanhe a produção da clínica e consulte relatórios individuais.</div></div><button class="action secondary" id="generalReportBtn">Baixar relatório geral</button></div>
-      <div class="cards">
-        <div class="card"><small>Horas realizadas</small><strong>486h</strong></div>
-        <div class="card"><small>Pacientes ativos</small><strong>24</strong></div>
-        <div class="card"><small>Atendimentos realizados</small><strong>486</strong></div>
-        <div class="card"><small>Faltas</small><strong>18</strong></div>
-      </div>
-      <table>
-        <tr><th>Estagiário</th><th>Horas</th><th>Pacientes</th><th>Atendimentos</th><th></th></tr>
-        <tr><td>João Pedro</td><td>84h</td><td>6</td><td>84</td><td><button class="action secondary">Relatório</button></td></tr>
-        <tr><td>Ana Beatriz</td><td>72h</td><td>5</td><td>72</td><td><button class="action secondary">Relatório</button></td></tr>
-        <tr><td>Lucas Almeida</td><td>64h</td><td>4</td><td>64</td><td><button class="action secondary">Relatório</button></td></tr>
-      </table>
-    </section>
-  `,
-  regras_horario: `<section class="panel"><h2>Configurações</h2><p class="subtle">Quadro de horários da clínica.</p></section>`
+  `
 };
 
 const internPages = {
@@ -862,19 +396,17 @@ const internPages = {
       <div class="card"><small>Aguardando confirmação</small><strong>1</strong></div>
       <div class="card"><small>Horas no semestre</small><strong>42h</strong></div>
     </div>
-    <section class="hero"><h2>Olá, ${'Dawton'}</h2><p>Você possui acesso de estagiário e de coordenador da agenda.</p></section>
     <section class="panel"><div class="toolbar"><h2>Meus próximos atendimentos</h2><button class="action secondary" id="internAppointmentsBtn">Ver meus agendamentos</button></div>
       <table><tr><th>Data</th><th>Horário</th><th>Paciente</th><th>Confirmação</th><th>Ação</th></tr>
-      <tr><td>18/08</td><td>14:00–15:00</td><td>#00342</td><td><span class="badge yellow">Aguardando</span></td><td><button class="action secondary confirmMock">Confirmar</button></td></tr>
-      <tr><td>19/08</td><td>15:00–16:00</td><td>#00501</td><td><span class="badge green">Confirmado</span></td><td><button class="action secondary presenceMock">Registrar presença</button></td></tr></table>
+      <tr><td>Hoje</td><td>14:00–15:00</td><td>#00342</td><td><span class="badge yellow">Aguardando</span></td><td><button class="action secondary confirmMock">Confirmar</button></td></tr>
+      </table>
     </section>
   `,
   disponibilidade: `<section class="panel"><h2>Minha disponibilidade</h2><p class="subtle">Marque somente os horários que a clínica liberou.</p></section>`,
   meus: `
     <section class="panel"><div class="toolbar"><div><h2>Meus agendamentos</h2><div class="subtle">Confirme os atendimentos com antecedência e registre presença ou ausência.</div></div></div>
       <table><tr><th>Data</th><th>Horário</th><th>Paciente</th><th>Confirmação</th><th>Presença</th></tr>
-      <tr><td>18/08/2026</td><td>14:00–15:00</td><td>#00342</td><td><button class="action secondary confirmMock">Confirmar</button></td><td>—</td></tr>
-      <tr><td>19/08/2026</td><td>15:00–16:00</td><td>#00501</td><td><span class="badge green">Confirmado</span></td><td><button class="action secondary presenceMock">Presente</button> <button class="action secondary absenceMock">Ausente</button></td></tr>
+      <tr><td>Hoje</td><td>14:00–15:00</td><td>#00342</td><td><button class="action secondary confirmMock">Confirmar</button></td><td>—</td></tr>
       </table>
     </section>
   `
@@ -893,14 +425,14 @@ async function loadProfile(user) {
     .single();
 
   if (profileError) {
-    throw new Error('Sua conta entrou, mas o perfil do sistema não foi encontrado.');
+    throw new Error('Conta validada, mas o perfil no banco não foi encontrado. Execute o script SQL e cadastre o perfil.');
   }
 
   currentProfile = profile;
 
   const { data: intern } = await db
     .from('interns')
-    .select('id, full_name, registration_number, current_semester, status, academic_period_id')
+    .select('id, full_name, registration_number, current_semester, status')
     .eq('user_id', user.id)
     .maybeSingle();
 
@@ -914,27 +446,27 @@ async function loadProfile(user) {
   currentContext = canCoordinate ? 'coordenacao' : 'estagiario';
   contextSelect.value = currentContext;
   currentPage = 'dashboard';
-  updateContextNavigation();
-  render();
+  
+  loadingScreen.style.display = 'none';
   loginScreen.style.display = 'none';
   app.style.display = 'flex';
+  
+  updateContextNavigation();
+  render();
 }
 
 function updateContextNavigation() {
-  const pages = currentContext === 'coordenacao' ? Object.keys(coordinatorPages) : Object.keys(internPages);
+  const pages = currentContext === 'coordenacao' 
+    ? ['dashboard', 'agenda', 'estagiarios', 'pacientes', 'relatorio', 'regras_horario'] 
+    : ['dashboard', 'meus', 'disponibilidade'];
   buildNav(pages);
 }
 
 function buildNav(pages) {
   const labels = {
-    dashboard:'Dashboard',
-    agenda:'Agenda',
-    estagiarios:'Estagiários',
-    pacientes:'Pacientes',
-    relatorio:'Relatórios',
-    regras_horario:'Configurações',
-    disponibilidade:'Minha disponibilidade',
-    meus:'Meus agendamentos'
+    dashboard:'Dashboard', agenda:'Agenda', estagiarios:'Estagiários',
+    pacientes:'Pacientes', relatorio:'Relatórios', regras_horario:'Configurações',
+    disponibilidade:'Minha disponibilidade', meus:'Meus agendamentos'
   };
   nav.innerHTML = pages.map(p => `<button data-page="${p}">${labels[p] || p}</button>`).join('');
   nav.querySelectorAll('button').forEach(button => {
@@ -951,35 +483,9 @@ function render() {
     if (currentPage === 'pacientes') { ecPrototypePatients(); return; }
     if (currentPage === 'relatorio' || currentPage === 'relatorios') { ecPrototypeReports(); return; }
     if (currentPage === 'regras_horario' || currentPage === 'configuracoes') { ecPrototypeSettings(); return; }
+    if (currentPage === 'estagiarios') { internListPage(); return; }
   }
-  if (currentContext === 'coordenacao' && currentPage === 'agenda') {
-    title.textContent = 'Agenda';
-    nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
-    agendaMockPage();
-    bindSimplePageActions();
-    return;
-  }
-  if (currentPage === 'disponibilidade') {
-    title.textContent = currentContext === 'estagiario' ? 'Minha disponibilidade' : 'Disponibilidade dos estagiários';
-    nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
-    availabilityPage();
-    bindSimplePageActions();
-    return;
-  }
-  if (currentContext === 'coordenacao' && currentPage === 'regras_horario') {
-    title.textContent = 'Regras de horário';
-    nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
-    availabilitySettingsPage();
-    bindSimplePageActions();
-    return;
-  }
-  if (currentContext === 'coordenacao' && currentPage === 'estagiarios') {
-    title.textContent = 'Estagiários';
-    nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
-    internListPage();
-    bindSimplePageActions();
-    return;
-  }
+  
   const pages = currentContext === 'coordenacao' ? coordinatorPages : internPages;
   content.innerHTML = pages[currentPage] || pages.dashboard;
   title.textContent = ({
@@ -989,22 +495,11 @@ function render() {
     regras_horario:'Configurações',meus:'Meus agendamentos'
   })[currentPage] || 'Dashboard';
   nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
+  bindSimplePageActions();
 }
-
 
 function bindSimplePageActions(){
   document.querySelectorAll('.confirmMock').forEach(b=>b.onclick=()=>{b.outerHTML='<span class="badge green">Confirmado</span>';});
-  document.querySelectorAll('.presenceMock').forEach(b=>b.onclick=()=>{b.outerHTML='<span class="badge green">Presente</span>';});
-  document.querySelectorAll('.absenceMock').forEach(b=>b.onclick=()=>{b.outerHTML='<span class="badge red">Ausente</span>';});
-  const modal=document.getElementById('patientModal');
-  if(modal){
-    document.getElementById('newPatientBtn').onclick=()=>modal.style.display='flex';
-    document.getElementById('closePatient').onclick=()=>modal.style.display='none';
-    document.getElementById('cancelPatient').onclick=()=>modal.style.display='none';
-    document.getElementById('savePatientMock').onclick=()=>{alert('Cadastro demonstrativo. A gravação será conectada ao Supabase na etapa de integração.');modal.style.display='none';};
-  }
-  document.getElementById('advanceSemesterBtn')?.addEventListener('click',()=>alert('A mudança para 2027.1 será aplicada a todos os estagiários após sua confirmação.'));
-  document.getElementById('generalReportBtn')?.addEventListener('click',()=>alert('O relatório geral será gerado na integração final.'));
   document.getElementById('dashboardAgendaBtn')?.addEventListener('click',()=>{currentPage='agenda';render();});
   document.getElementById('internAppointmentsBtn')?.addEventListener('click',()=>{currentPage='meus';render();});
 }
@@ -1038,7 +533,6 @@ loginForm.addEventListener('submit', async (event) => {
   loginButton.textContent = 'Entrar';
 });
 
-
 contextSelect.addEventListener('change', () => {
   currentContext = contextSelect.value;
   currentPage = 'dashboard';
@@ -1052,34 +546,12 @@ contextSelect.addEventListener('change', () => {
 logoutButton.addEventListener('click', async () => {
   await db.auth.signOut();
   app.style.display = 'none';
+  loadingScreen.style.display = 'none';
   loginScreen.style.display = 'flex';
   loginForm.reset();
   showMessage('Você saiu do sistema.', 'success');
 });
 
-db.auth.onAuthStateChange(async (_event, session) => {
-  if (session?.user && !currentProfile) {
-    try {
-      await loadProfile(session.user);
-    } catch (e) {
-      await db.auth.signOut();
-      showMessage(e.message || 'Não foi possível carregar seu perfil.');
-    }
-  }
-});
-
-
-// ------------------------------------------------------------
-// INTERAÇÕES DO FRONTEND — protótipo local editável
-// ------------------------------------------------------------
-const EC_LOCAL_KEY = 'escuta_frontend_state_v1';
-function ecGetState(){
-  try{return JSON.parse(localStorage.getItem(EC_LOCAL_KEY)) || {schedule:{}, patients:[]};}
-  catch{return {schedule:{}, patients:[]};}
-}
-function ecSaveState(state){localStorage.setItem(EC_LOCAL_KEY,JSON.stringify(state));}
-
-// Delegação de eventos: funciona mesmo quando as telas são recriadas por render().
 document.addEventListener('click', (event) => {
   const toggle = event.target.closest('.ec-toggle-slot');
   if(toggle){
@@ -1089,51 +561,12 @@ document.addEventListener('click', (event) => {
     toggle.textContent = open ? '⚪ Fechado' : '🟢 Liberado';
     return;
   }
-
   const view = event.target.closest('.ec-view');
   if(view){
     document.querySelectorAll('.ec-view').forEach(b=>b.classList.remove('active'));
     view.classList.add('active');
     return;
   }
-
-  if(event.target.closest('#ecNewAppointment')){
-    const m=document.getElementById('ecAppointmentModal'); if(m)m.style.display='flex'; return;
-  }
-  if(event.target.closest('#ecClose') || event.target.closest('#ecCancel')){
-    const m=document.getElementById('ecAppointmentModal'); if(m)m.style.display='none'; return;
-  }
-  if(event.target.closest('#ecConfirm')){
-    alert('Agendamento criado no modo de demonstração. A conexão com o Supabase será feita na próxima etapa.');
-    const m=document.getElementById('ecAppointmentModal'); if(m)m.style.display='none'; return;
-  }
-
-  if(event.target.closest('#ecNewPatient')){
-    const m=document.getElementById('ecPatientModal'); if(m)m.style.display='flex'; return;
-  }
-  if(event.target.closest('#ecPatientClose') || event.target.closest('#ecPatientCancel')){
-    const m=document.getElementById('ecPatientModal'); if(m)m.style.display='none'; return;
-  }
-  if(event.target.closest('#ecPatientSave')){
-    alert('Paciente cadastrado no modo de demonstração.');
-    const m=document.getElementById('ecPatientModal'); if(m)m.style.display='none'; return;
-  }
-
-  const patientEdit=event.target.closest('.patientEdit');
-  if(patientEdit){alert('A edição do paciente está disponível no protótipo. A gravação no Supabase será conectada na próxima etapa.');return;}
-
-  if(event.target.closest('#ecSaveSchedule')){
-    alert('Quadro salvo no protótipo. Os horários liberados serão usados como filtro para os estagiários.'); return;
-  }
-
-  if(event.target.closest('#saveClinicSchedule')){
-    alert('Quadro salvo no protótipo.'); return;
-  }
-});
-
-// Impede o navegador de submeter formulários de protótipo e recarregar a página.
-document.addEventListener('submit', (event) => {
-  if(event.target.closest('.ec-modal')) event.preventDefault();
 });
 
 (async function init() {
@@ -1143,8 +576,13 @@ document.addEventListener('submit', (event) => {
       await loadProfile(session.user);
     } catch (e) {
       await db.auth.signOut();
+      loadingScreen.style.display = 'none';
+      loginScreen.style.display = 'flex';
       showMessage(e.message || 'Não foi possível carregar seu perfil.');
     }
+  } else {
+    loadingScreen.style.display = 'none';
+    loginScreen.style.display = 'flex';
   }
 })();
 </script>
