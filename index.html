@@ -33,7 +33,8 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px
 .ec-appt strong,.ec-appt span,.ec-appt small{display:block}
 .ec-appt span{font-size:12px;margin-top:3px}.ec-appt small{font-size:11px;color:#667085;margin-top:2px}
 .ec-pills{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
-.ec-pill{padding:7px 10px;border-radius:999px;background:#f2f4f7;font-size:12px}
+.ec-pill{padding:7px 10px;border-radius:999px;background:#f2f4f7;font-size:12px;cursor:pointer;border:0}
+.ec-pill.active{background:#315c8c;color:#fff;font-weight:700}
 .ec-status{display:inline-block;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:700}
 .ec-green{background:#e7f3ec;color:#176b36}.ec-yellow{background:#fff4d6;color:#8a5b00}.ec-red{background:#fdecec;color:#a12b2b}.ec-gray{background:#eef0f2;color:#475467}
 .ec-modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;}
@@ -158,7 +159,6 @@ function generateAvailabilityGrid(clinicSlots, userSlots) {
   return html;
 }
 
-// Visualizador de grade compacta (somente leitura) para prévia no modal
 function generateReadOnlyMiniGrid(clinicSlots, userSlots) {
   const days = [{n:1, l:'Seg'},{n:2, l:'Ter'},{n:3, l:'Qua'},{n:4, l:'Qui'},{n:5, l:'Sex'},{n:6, l:'Sáb'}];
   const enabledTimes = [...new Set((clinicSlots||[]).map(s => s.start_time.slice(0,5)))].sort();
@@ -396,7 +396,70 @@ const ecPrototypePatients = async () => {
 };
 
 // -------------------------------------------------------------------------
-// PÁGINA: GRADE GERAL CRUZADA DE ESTAGIÁRIOS
+// PÁGINA: DISPONIBILIDADE DO ESTAGIÁRIO (Menu Interno)
+// -------------------------------------------------------------------------
+const availabilityPage = async () => {
+  content.innerHTML = `
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <h2>Minha disponibilidade</h2>
+          <div class="ec-muted">Marque os horários em que você pode realizar atendimentos.</div>
+        </div>
+        <button id="saveMyAvailBtn" class="action">Salvar minha disponibilidade</button>
+      </div>
+      <div id="internAvailMsg" class="message"></div>
+      <div class="ec-calendar" id="internAvailGrid">
+        <div style="grid-column: 1/-1; padding: 20px; text-align: center;">Carregando grade...</div>
+      </div>
+    </section>`;
+
+  if(!currentIntern) {
+      document.getElementById('internAvailGrid').innerHTML = `<div style="grid-column: 1/-1; padding: 20px; text-align: center; color: #b42318;">Você ainda não possui um perfil de estagiário vinculado. Peça à coordenação para associar seu e-mail.</div>`;
+      document.getElementById('saveMyAvailBtn').style.display = 'none';
+      return;
+  }
+
+  const grid = document.getElementById('internAvailGrid');
+  const msg = document.getElementById('internAvailMsg');
+
+  const { data: clinicSlots } = await db.from('clinic_schedule_slots').select('*').eq('enabled', true);
+  const { data: mySlots } = await db.from('intern_availability').select('*').eq('intern_id', currentIntern.id);
+
+  grid.innerHTML = generateAvailabilityGrid(clinicSlots, mySlots || []);
+
+  document.getElementById('saveMyAvailBtn').onclick = async () => {
+     const btn = document.getElementById('saveMyAvailBtn');
+     btn.disabled = true; btn.textContent = 'Salvando...'; msg.style.display = 'none';
+
+     const selectedSlots = Array.from(document.querySelectorAll('#internAvailGrid .ec-open')).map(b => ({
+         intern_id: currentIntern.id,
+         weekday: parseInt(b.dataset.day),
+         start_time: b.dataset.start,
+         end_time: b.dataset.end
+     }));
+
+     const { error: delErr } = await db.from('intern_availability').delete().eq('intern_id', currentIntern.id);
+     if(delErr) {
+         msg.textContent = 'Erro ao limpar grade: ' + delErr.message; msg.className = 'message error'; msg.style.display = 'block';
+         btn.disabled = false; btn.textContent = 'Salvar minha disponibilidade'; return;
+     }
+
+     if(selectedSlots.length > 0) {
+         const { error: insErr } = await db.from('intern_availability').insert(selectedSlots);
+         if(insErr) {
+             msg.textContent = 'Erro ao salvar horários: ' + insErr.message; msg.className = 'message error'; msg.style.display = 'block';
+             btn.disabled = false; btn.textContent = 'Salvar minha disponibilidade'; return;
+         }
+     }
+
+     msg.textContent = 'Sua disponibilidade foi salva com sucesso.'; msg.className = 'message success'; msg.style.display = 'block';
+     btn.disabled = false; btn.textContent = 'Salvar minha disponibilidade';
+  };
+};
+
+// -------------------------------------------------------------------------
+// PÁGINA: GRADE GERAL CRUZADA DE ESTAGIÁRIOS (Com clique direto para agendar)
 // -------------------------------------------------------------------------
 const ecCrossedAvailabilityPage = async () => {
   content.innerHTML = `
@@ -404,7 +467,7 @@ const ecCrossedAvailabilityPage = async () => {
       <div class="toolbar">
         <div>
           <h2>Grade Geral de Disponibilidade dos Estagiários</h2>
-          <div class="ec-muted">Visualize os horários livres de todos os estagiários ativos cruzados com o quadro da clínica.</div>
+          <div class="ec-muted">Clique em qualquer horário disponível de um estagiário para iniciar um agendamento direto.</div>
         </div>
       </div>
       <div id="crossedGridWrap" style="overflow:auto; margin-top:14px;">Carregando grade cruzada...</div>
@@ -440,14 +503,16 @@ const ecCrossedAvailabilityPage = async () => {
       if(!cSlot) {
         html += `<td style="background:#f9fafb; color:#98a2b3; font-size:11px">Fechado clínica</td>`;
       } else {
-        // Encontra quais estagiários marcaram disponibilidade neste dia e horário
-        const availableInterns = (allAvail || []).filter(a => a.weekday === d.n && a.start_time.slice(0,5) === time).map(a => {
-          const internObj = interns.find(i => i.id === a.intern_id);
-          return internObj ? internObj.full_name.split(' ')[0] : null;
-        }).filter(Boolean);
-
-        if(availableInterns.length > 0) {
-          html += `<td style="background:#e9f7ef;"><strong style="color:#176b36; font-size:12px">✓ ${availableInterns.length} estagiário(s):</strong><div style="font-size:11px; color:#475467">${availableInterns.join(', ')}</div></td>`;
+        const matchingAvail = (allAvail || []).filter(a => a.weekday === d.n && a.start_time.slice(0,5) === time);
+        if(matchingAvail.length > 0) {
+          html += `<td style="background:#e9f7ef; padding:8px;">`;
+          matchingAvail.forEach(a => {
+            const internObj = interns.find(i => i.id === a.intern_id);
+            if(internObj) {
+               html += `<button class="action secondary quick-sched-btn" data-intern-id="${internObj.id}" data-weekday="${d.n}" data-start="${time}:00" data-end="${endHour}:00" style="display:block; width:100%; margin-bottom:4px; font-size:11px; padding:4px; text-align:left; background:#fff; border:1px solid #bce3cc; color:#176b36;">⚡ ${escapeHtml(internObj.full_name)}</button>`;
+            }
+          });
+          html += `</td>`;
         } else {
           html += `<td style="color:#98a2b3; font-size:11px">Nenhum disponível</td>`;
         }
@@ -457,21 +522,47 @@ const ecCrossedAvailabilityPage = async () => {
   });
   html += `</tbody></table>`;
   wrap.innerHTML = html;
+
+  // Clique direto no botão do estagiário na Grade Geral abre o modal de agendamento pré-preenchido
+  wrap.querySelectorAll('.quick-sched-btn').forEach(btn => {
+     btn.onclick = () => {
+        const internId = btn.dataset.internId;
+        const weekday = btn.dataset.weekday;
+        const startTime = btn.dataset.start;
+        // Muda para a aba de Agenda e abre o modal já configurado
+        currentPage = 'agenda';
+        render();
+        // Dispara a abertura do modal com parâmetros rápidos
+        setTimeout(() => {
+           openAppointmentModalWithPreset(internId, weekday, startTime);
+        }, 150);
+     };
+  });
 };
 
 // -------------------------------------------------------------------------
-// PÁGINA: AGENDA & MOTOR DE AGENDAMENTO
+// PÁGINA: AGENDA COM VISÕES DE CALENDÁRIO (DIA / SEMANA / MÊS)
 // -------------------------------------------------------------------------
+let currentAgendaView = 'semana'; // 'dia', 'semana', 'mes'
+let appointmentModalGlobalOpen = false;
+
 const ecPrototypeAgenda = async () => {
   content.innerHTML=`
   <section class="panel">
     <div class="toolbar">
-      <div><h2>Agenda e Atendimentos</h2><div class="ec-muted">Gerencie a agenda da clínica e crie novos acompanhamentos semanais.</div></div>
+      <div><h2>Agenda e Atendimentos</h2><div class="ec-muted">Visualize a agenda em formato de calendário e gerencie os atendimentos.</div></div>
       <button class="action" id="ecNewAppointment">+ Novo agendamento</button>
     </div>
+    
+    <div class="ec-pills">
+      <button class="action secondary ec-agenda-view ${currentAgendaView==='dia'?'active':''}" data-view="dia">Dia</button>
+      <button class="action secondary ec-agenda-view ${currentAgendaView==='semana'?'active':''}" data-view="semana">Semana</button>
+      <button class="action secondary ec-agenda-view ${currentAgendaView==='mes'?'active':''}" data-view="mes">Mês</button>
+    </div>
+
     <div id="agendaMsg" class="message"></div>
-    <div style="margin-top:16px;" id="appointmentsTableWrap">
-      <div class="notice">Carregando atendimentos agendados...</div>
+    <div style="margin-top:16px;" id="appointmentsCalendarWrap">
+      <div class="notice">Carregando calendário de atendimentos...</div>
     </div>
   </section>
 
@@ -495,7 +586,6 @@ const ecPrototypeAgenda = async () => {
       <div class="field"><label>Horário *</label><select id="apptTimeSlot"><option value="">Carregando horários...</option></select></div>
     </div>
 
-    <!-- PAINEL DE PRÉVIAS DE DISPONIBILIDADE DO PACIENTE E ESTAGIÁRIO -->
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px;">
       <div style="background:#f8fafc; padding:12px; border-radius:10px; border:1px solid #e2e8f0;">
         <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:#315c8c;">Disponibilidade do Paciente</div>
@@ -518,239 +608,316 @@ const ecPrototypeAgenda = async () => {
     </div>
   </div></div>`;
 
+  const wrap = document.getElementById('appointmentsCalendarWrap');
+  
+  // Alternar entre visões de dia / semana / mês
+  document.querySelectorAll('.ec-agenda-view').forEach(btn => {
+     btn.onclick = () => {
+        document.querySelectorAll('.ec-agenda-view').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentAgendaView = btn.dataset.view;
+        renderCalendarView(appointmentsCache);
+     };
+  });
+
+  let appointmentsCache = [];
+  const { data, error } = await db.from('appointments')
+    .select('id, appointment_date, start_time, end_time, status, intern_confirmation, patient_confirmation, attendance_status, patients(registration_number, full_name), interns(full_name)')
+    .order('appointment_date', { ascending: true });
+
+  if(error) { wrap.innerHTML = `<div class="message error" style="display:block">Erro: ${error.message}</div>`; return; }
+  appointmentsCache = data || [];
+
+  renderCalendarView(appointmentsCache);
+
+  document.getElementById('ecNewAppointment').onclick = () => openAppointmentModalWithPreset();
+  document.getElementById('ecClose').onclick = () => document.getElementById('ecAppointmentModal').style.display = 'none';
+  document.getElementById('ecCancel').onclick = () => document.getElementById('ecAppointmentModal').style.display = 'none';
+};
+
+// Renderizador do Calendário de Atendimentos
+function renderCalendarView(appointments) {
+  const wrap = document.getElementById('appointmentsCalendarWrap');
+  if(!appointments || appointments.length === 0) {
+    wrap.innerHTML = `<div class="notice">Nenhum atendimento agendado no momento. Clique em "+ Novo agendamento" para começar.</div>`;
+    return;
+  }
+
+  if(currentAgendaView === 'dia') {
+     // Visão de Dia: Lista detalhada ou grade diária
+     const rows = appointments.map(a => {
+        const pat = a.patients ? `#${a.patients.registration_number} (${a.patients.full_name || 'Sem nome'})` : '—';
+        const intern = a.interns ? a.interns.full_name : '—';
+        return `<tr>
+          <td><strong>${a.appointment_date.split('-').reverse().join('/')}</strong></td>
+          <td>${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}</td>
+          <td>${pat}</td>
+          <td>${intern}</td>
+          <td><span class="badge green">Agendado</span></td>
+          <td><button class="action secondary delete-appt" data-id="${a.id}" style="padding:4px 8px; font-size:11px; background:#fdecec; color:#b42318; border:0;">Excluir</button></td>
+        </tr>`;
+     }).join('');
+     wrap.innerHTML = `<table><tr><th>Data</th><th>Horário</th><th>Paciente</th><th>Estagiário</th><th>Status</th><th>Ações</th></tr>${rows}</table>`;
+  } 
+  else if(currentAgendaView === 'semana') {
+     // Visão de Calendário Semanal
+     const days = [{n:1, l:'Segunda'},{n:2, l:'Terça'},{n:3, l:'Quarta'},{n:4, l:'Quinta'},{n:5, l:'Sexta'},{n:6, l:'Sábado'}];
+     const times = ['13:00', '14:00', '15:00', '16:00', '17:00'];
+     
+     let html = `<div class="ec-calendar"><div class="ec-head">Horário</div>` + days.map(d=>`<div class="ec-head">${d.l}</div>`).join('');
+     times.forEach(t => {
+        html += `<div><strong>${t}</strong></div>`;
+        days.forEach(d => {
+           // Encontra agendamentos que caem neste horário e dia da semana
+           const matching = appointments.filter(a => {
+              const apptDate = new Date(a.appointment_date + 'T00:00:00');
+              const wd = apptDate.getDay() === 0 ? 7 : apptDate.getDay();
+              return wd === d.n && a.start_time.slice(0,5) === t;
+           });
+
+           if(matching.length > 0) {
+              html += `<div class="ec-appt ec-confirmed">`;
+              matching.forEach(m => {
+                 const pat = m.patients ? `#${m.patients.registration_number}` : '';
+                 const intern = m.interns ? m.interns.full_name.split(' ')[0] : '';
+                 html += `<strong>${t}</strong><span>${pat}</span><small>${intern}</small>`;
+              });
+              html += `</div>`;
+           } else {
+              html += `<div></div>`;
+           }
+        });
+     });
+     html += `</div>`;
+     wrap.innerHTML = html;
+  }
+  else {
+     // Visão de Mês (Lista compacta agrupada por data)
+     const rows = appointments.map(a => {
+        const pat = a.patients ? `#${a.patients.registration_number} (${a.patients.full_name || 'Sem nome'})` : '—';
+        const intern = a.interns ? a.interns.full_name : '—';
+        return `<tr>
+          <td><strong>${a.appointment_date.split('-').reverse().join('/')}</strong></td>
+          <td>${a.start_time.slice(0,5)} – ${a.end_time.slice(0,5)}</td>
+          <td>${pat}</td>
+          <td>${intern}</td>
+        </tr>`;
+     }).join('');
+     wrap.innerHTML = `<div class="ec-muted" style="margin-bottom:10px;">Exibindo todos os atendimentos do mês em formato sequencial:</div><table><tr><th>Data</th><th>Horário</th><th>Paciente</th><th>Estagiário</th></tr>${rows}</table>`;
+  }
+
+  wrap.querySelectorAll('.delete-appt').forEach(btn => btn.onclick = async () => {
+    if(confirm('Deseja excluir este atendimento?')) {
+      await db.from('appointments').delete().eq('id', btn.dataset.id);
+      const { data } = await db.from('appointments').select('id, appointment_date, start_time, end_time, status, intern_confirmation, patient_confirmation, attendance_status, patients(registration_number, full_name), interns(full_name)');
+      renderCalendarView(data || []);
+    }
+  });
+}
+
+// Abertura do Modal de Agendamento (com suporte a pré-preenchimento da Grade Geral)
+async function openAppointmentModalWithPreset(presetInternId = null, presetWeekday = null, presetStartTime = null) {
   const modal = document.getElementById('ecAppointmentModal');
-  const wrap = document.getElementById('appointmentsTableWrap');
-  const previewText = document.getElementById('apptPreviewText');
-  const confirmBtn = document.getElementById('ecConfirm');
   const modalNotice = document.getElementById('modalNotice');
+  const confirmBtn = document.getElementById('ecConfirm');
+  const previewText = document.getElementById('apptPreviewText');
   const patientMini = document.getElementById('patientMiniPreview');
   const internMini = document.getElementById('internMiniPreview');
 
-  let clinicSlotsCache = [];
-  let allPatientsCache = [];
-  let allInternsCache = [];
+  modalNotice.style.display = 'none';
+  confirmBtn.disabled = true;
+  previewText.textContent = 'Preencha os campos para calcular a prévia.';
+  patientMini.innerHTML = '<span class="ec-muted">Selecione um paciente...</span>';
+  internMini.innerHTML = '<span class="ec-muted">Selecione um estagiário...</span>';
 
-  const loadAppointments = async () => {
-    const { data, error } = await db.from('appointments')
-      .select('id, appointment_date, start_time, end_time, status, intern_confirmation, patient_confirmation, attendance_status, patients(registration_number, full_name), interns(full_name)')
-      .order('appointment_date', { ascending: true });
+  const [{ data: pats }, { data: interns }, { data: slots }] = await Promise.all([
+    db.from('patients').select('id, registration_number, full_name').eq('status', 'ativo'),
+    db.from('interns').select('id, full_name').eq('status', 'ativo'),
+    db.from('clinic_schedule_slots').select('*').eq('enabled', true)
+  ]);
 
-    if(error) { wrap.innerHTML = `<div class="message error" style="display:block">Erro: ${error.message}</div>`; return; }
-    if(!data || data.length === 0) { wrap.innerHTML = `<div class="notice">Nenhum atendimento agendado no momento. Clique em "+ Novo agendamento" para começar.</div>`; return; }
+  const allPatientsCache = pats || [];
+  const allInternsCache = interns || [];
+  const clinicSlotsCache = slots || [];
 
-    const rows = data.map(a => {
-      const pat = a.patients ? `#${a.patients.registration_number} (${a.patients.full_name || 'Sem nome'})` : '—';
-      const intern = a.interns ? a.interns.full_name : '—';
-      const badgeConf = a.intern_confirmation === 'confirmado' ? 'green' : a.intern_confirmation === 'nao_confirmado' ? 'red' : 'yellow';
-      return `<tr>
-        <td><strong>${a.appointment_date.split('-').reverse().join('/')}</strong></td>
-        <td>${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}</td>
-        <td>${pat}</td>
-        <td>${intern}</td>
-        <td><span class="badge ${badgeConf}">${a.intern_confirmation}</span></td>
-        <td><button class="action secondary delete-appt" data-id="${a.id}" style="padding:4px 8px; font-size:11px; background:#fdecec; color:#b42318; border:0;">Excluir</button></td>
-      </tr>`;
-    }).join('');
-
-    wrap.innerHTML = `<table><tr><th>Data</th><th>Horário</th><th>Paciente</th><th>Estagiário</th><th>Confirmação</th><th>Ações</th></tr>${rows}</table>`;
-
-    wrap.querySelectorAll('.delete-appt').forEach(btn => btn.onclick = async () => {
-      if(confirm('Deseja excluir este atendimento?')) {
-        await db.from('appointments').delete().eq('id', btn.dataset.id);
-        await loadAppointments();
-      }
-    });
+  document.getElementById('apptPatient').innerHTML = '<option value="">Selecione...</option>' + allPatientsCache.map(p=>`<option value="${p.id}">#${p.registration_number} — ${p.full_name||'Sem nome'}</option>`).join('');
+  document.getElementById('apptIntern').innerHTML = '<option value="">Selecione...</option>' + allInternsCache.map(i=>`<option value="${i.id}">${i.full_name}</option>`).join('');
+  
+  const updateTimeSlots = () => {
+    const wd = parseInt(document.getElementById('apptWeekday').value);
+    const filtered = clinicSlotsCache.filter(s => s.weekday === wd);
+    document.getElementById('apptTimeSlot').innerHTML = '<option value="">Selecione o horário...</option>' + filtered.map(s=>`<option value="${s.start_time}|${s.end_time}">${s.start_time.slice(0,5)} – ${s.end_time.slice(0,5)}</option>`).join('');
   };
 
-  await loadAppointments();
+  document.getElementById('apptWeekday').onchange = updateTimeSlots;
+  updateTimeSlots();
 
-  document.getElementById('ecNewAppointment').onclick = async () => {
-    modalNotice.style.display = 'none';
-    confirmBtn.disabled = true;
-    previewText.textContent = 'Preencha os campos para calcular a prévia.';
-    patientMini.innerHTML = '<span class="ec-muted">Selecione um paciente...</span>';
-    internMini.innerHTML = '<span class="ec-muted">Selecione um estagiário...</span>';
+  // Se veio pré-selecionado da Grade Geral
+  if(presetInternId) {
+     document.getElementById('apptIntern').value = presetInternId;
+     // Dispara o evento de carregamento da mini grade do estagiário
+     document.getElementById('apptIntern').onchange();
+  }
+  if(presetWeekday) {
+     document.getElementById('apptWeekday').value = presetWeekday;
+     updateTimeSlots();
+  }
+  if(presetStartTime) {
+     // Encontra o option correspondente
+     const timeSelect = document.getElementById('apptTimeSlot');
+     for(let opt of timeSelect.options) {
+        if(opt.value.startsWith(presetStartTime)) {
+           timeSelect.value = opt.value;
+           break;
+        }
+     }
+  }
 
-    const [{ data: pats }, { data: interns }, { data: slots }] = await Promise.all([
-      db.from('patients').select('id, registration_number, full_name').eq('status', 'ativo'),
-      db.from('interns').select('id, full_name').eq('status', 'ativo'),
-      db.from('clinic_schedule_slots').select('*').eq('enabled', true)
-    ]);
-
-    allPatientsCache = pats || [];
-    allInternsCache = interns || [];
-    clinicSlotsCache = slots || [];
-
-    document.getElementById('apptPatient').innerHTML = '<option value="">Selecione...</option>' + allPatientsCache.map(p=>`<option value="${p.id}">#${p.registration_number} — ${p.full_name||'Sem nome'}</option>`).join('');
-    document.getElementById('apptIntern').innerHTML = '<option value="">Selecione...</option>' + allInternsCache.map(i=>`<option value="${i.id}">${i.full_name}</option>`).join('');
-    
-    const updateTimeSlots = () => {
-      const wd = parseInt(document.getElementById('apptWeekday').value);
-      const filtered = clinicSlotsCache.filter(s => s.weekday === wd);
-      document.getElementById('apptTimeSlot').innerHTML = '<option value="">Selecione o horário...</option>' + filtered.map(s=>`<option value="${s.start_time}|${s.end_time}">${s.start_time.slice(0,5)} – ${s.end_time.slice(0,5)}</option>`).join('');
-    };
-
-    document.getElementById('apptWeekday').onchange = updateTimeSlots;
-    updateTimeSlots();
-
-    modal.style.display = 'flex';
-  };
-
-  // Exibir mini grade do paciente ao selecionar
+  // Eventos de alteração para mini grades e prévia
   document.getElementById('apptPatient').onchange = async () => {
     const patId = document.getElementById('apptPatient').value;
-    if(!patId) { patientMini.innerHTML = '<span class="ec-muted">Nenhum paciente selecionado.</span>'; calculatePreview(); return; }
+    if(!patId) { patientMini.innerHTML = '<span class="ec-muted">Nenhum paciente selecionado.</span>'; calculatePreview(clinicSlotsCache); return; }
     const { data: pAvail } = await db.from('patient_availability').select('*').eq('patient_id', patId);
     if(!pAvail || pAvail.length === 0) {
-      patientMini.innerHTML = `<span class="ec-muted">Paciente sem grade específica (aceita qualquer horário da clínica).</span>`;
+      patientMini.innerHTML = `<span class="ec-muted">Paciente sem grade específica (aceita qualquer horário).</span>`;
     } else {
       patientMini.innerHTML = generateReadOnlyMiniGrid(clinicSlotsCache, pAvail);
     }
-    calculatePreview();
+    calculatePreview(clinicSlotsCache);
   };
 
-  // Exibir mini grade do estagiário ao selecionar
   document.getElementById('apptIntern').onchange = async () => {
     const internId = document.getElementById('apptIntern').value;
-    if(!internId) { internMini.innerHTML = '<span class="ec-muted">Nenhum estagiário selecionado.</span>'; calculatePreview(); return; }
+    if(!internId) { internMini.innerHTML = '<span class="ec-muted">Nenhum estagiário selecionado.</span>'; calculatePreview(clinicSlotsCache); return; }
     const { data: iAvail } = await db.from('intern_availability').select('*').eq('intern_id', internId);
     if(!iAvail || iAvail.length === 0) {
-      internMini.innerHTML = `<span class="ec-muted" style="color:#b42318">Estagiário não cadastrou nenhuma disponibilidade.</span>`;
+      internMini.innerHTML = `<span class="ec-muted" style="color:#b42318">Estagiário não cadastrou disponibilidade.</span>`;
     } else {
       internMini.innerHTML = generateReadOnlyMiniGrid(clinicSlotsCache, iAvail);
     }
-    calculatePreview();
-  };
-
-  document.getElementById('ecClose').onclick = () => modal.style.display = 'none';
-  document.getElementById('ecCancel').onclick = () => modal.style.display = 'none';
-
-  const calculatePreview = async () => {
-    modalNotice.style.display = 'none';
-    confirmBtn.disabled = true;
-
-    const patientId = document.getElementById('apptPatient').value;
-    const internId = document.getElementById('apptIntern').value;
-    const startDateStr = document.getElementById('apptStartDate').value;
-    const endDateStr = document.getElementById('apptEndDate').value;
-    const weekday = parseInt(document.getElementById('apptWeekday').value);
-    const timeVal = document.getElementById('apptTimeSlot').value;
-
-    if(!patientId || !internId || !startDateStr || !endDateStr || !timeVal) {
-      previewText.textContent = 'Preencha todos os campos obrigatórios para gerar a prévia.';
-      return;
-    }
-
-    const [startTime, endTime] = timeVal.split('|');
-    const start = new Date(startDateStr + 'T00:00:00');
-    const end = new Date(endDateStr + 'T00:00:00');
-
-    if(start > end) {
-      modalNotice.textContent = 'A data inicial não pode ser posterior à data final.';
-      modalNotice.className = 'message error'; modalNotice.style.display = 'block';
-      return;
-    }
-
-    // Regra 1: Horário liberado pela clínica
-    const clinicCheck = clinicSlotsCache.some(s => s.weekday === weekday && s.start_time.slice(0,5) === startTime.slice(0,5));
-    if(!clinicCheck) {
-      modalNotice.textContent = 'Conflito: Este horário está fechado no Quadro de Horários da clínica.';
-      modalNotice.className = 'message error'; modalNotice.style.display = 'block';
-      return;
-    }
-
-    // Regra 2: Disponibilidade do estagiário
-    const { data: internCheck } = await db.from('intern_availability')
-      .select('id').eq('intern_id', internId).eq('weekday', weekday).eq('start_time', startTime).maybeSingle();
-
-    if(!internCheck) {
-      modalNotice.textContent = 'Conflito: O estagiário selecionado não marcou disponibilidade neste horário.';
-      modalNotice.className = 'message error'; modalNotice.style.display = 'block';
-      return;
-    }
-
-    // Regra 3: Disponibilidade do paciente (apenas se ele preencheu grade)
-    const { data: patAvail } = await db.from('patient_availability').select('id, weekday, start_time').eq('patient_id', patientId);
-    if(patAvail && patAvail.length > 0) {
-      const patCheck = patAvail.some(p => p.weekday === weekday && p.start_time.slice(0,5) === startTime.slice(0,5));
-      if(!patCheck) {
-        modalNotice.textContent = 'Conflito: O paciente possui grade cadastrada, mas não marcou disponibilidade neste horário.';
-        modalNotice.className = 'message error'; modalNotice.style.display = 'block';
-        return;
-      }
-    }
-
-    let curr = new Date(start);
-    while(curr.getDay() !== (weekday % 7)) curr.setDate(curr.getDate() + 1);
-
-    const generatedDates = [];
-    while(curr <= end) {
-      generatedDates.push(new Date(curr));
-      curr.setDate(curr.getDate() + 7);
-    }
-
-    if(generatedDates.length === 0) {
-      previewText.textContent = 'Nenhuma data encontrada para este dia da semana no período.';
-      return;
-    }
-
-    // Regra 4: Choque de horários
-    const dateStrings = generatedDates.map(d => d.toISOString().split('T')[0]);
-    const { data: conflicts } = await db.from('appointments')
-      .select('appointment_date, intern_id, patient_id')
-      .in('appointment_date', dateStrings)
-      .eq('start_time', startTime)
-      .eq('status', 'agendado');
-
-    if(conflicts && conflicts.length > 0) {
-      const hasConflict = conflicts.some(c => c.intern_id === internId || c.patient_id === patientId);
-      if(hasConflict) {
-        modalNotice.textContent = 'Conflito de agenda: O estagiário ou o paciente já possuem atendimento nestas datas/horários.';
-        modalNotice.className = 'message error'; modalNotice.style.display = 'block';
-        return;
-      }
-    }
-
-    previewText.innerHTML = `Serão gerados <strong>${generatedDates.length} atendimentos semanais</strong> (das <strong>${startTime.slice(0,5)} às ${endTime.slice(0,5)}</strong>).<br><small>Primeira sessão: ${generatedDates[0].toLocaleDateString('pt-BR')} | Última sessão: ${generatedDates[generatedDates.length-1].toLocaleDateString('pt-BR')}</small>`;
-    confirmBtn.disabled = false;
+    calculatePreview(clinicSlotsCache);
   };
 
   ['apptStartDate', 'apptEndDate', 'apptWeekday', 'apptTimeSlot'].forEach(id => {
-    document.getElementById(id).onchange = calculatePreview;
+    document.getElementById(id).onchange = () => calculatePreview(clinicSlotsCache);
   });
+
+  if(presetInternId) {
+     calculatePreview(clinicSlotsCache);
+  }
+
+  modal.style.display = 'flex';
+}
+
+async function calculatePreview(clinicSlotsCache) {
+  const modalNotice = document.getElementById('modalNotice');
+  const confirmBtn = document.getElementById('ecConfirm');
+  const previewText = document.getElementById('apptPreviewText');
+  
+  modalNotice.style.display = 'none';
+  confirmBtn.disabled = true;
+
+  const patientId = document.getElementById('apptPatient').value;
+  const internId = document.getElementById('apptIntern').value;
+  const startDateStr = document.getElementById('apptStartDate').value;
+  const endDateStr = document.getElementById('apptEndDate').value;
+  const weekday = parseInt(document.getElementById('apptWeekday').value);
+  const timeVal = document.getElementById('apptTimeSlot').value;
+
+  if(!patientId || !internId || !startDateStr || !endDateStr || !timeVal) {
+    previewText.textContent = 'Preencha todos os campos obrigatórios para gerar a prévia.';
+    return;
+  }
+
+  const [startTime, endTime] = timeVal.split('|');
+  const start = new Date(startDateStr + 'T00:00:00');
+  const end = new Date(endDateStr + 'T00:00:00');
+
+  if(start > end) {
+    modalNotice.textContent = 'A data inicial não pode ser posterior à data final.';
+    modalNotice.className = 'message error'; modalNotice.style.display = 'block';
+    return;
+  }
+
+  const clinicCheck = clinicSlotsCache.some(s => s.weekday === weekday && s.start_time.slice(0,5) === startTime.slice(0,5));
+  if(!clinicCheck) {
+    modalNotice.textContent = 'Conflito: Este horário está fechado no Quadro de Horários da clínica.';
+    modalNotice.className = 'message error'; modalNotice.style.display = 'block';
+    return;
+  }
+
+  const { data: internCheck } = await db.from('intern_availability')
+    .select('id').eq('intern_id', internId).eq('weekday', weekday).eq('start_time', startTime).maybeSingle();
+
+  if(!internCheck) {
+    modalNotice.textContent = 'Conflito: O estagiário selecionado não marcou disponibilidade neste horário.';
+    modalNotice.className = 'message error'; modalNotice.style.display = 'block';
+    return;
+  }
+
+  const { data: patAvail } = await db.from('patient_availability').select('id, weekday, start_time').eq('patient_id', patientId);
+  if(patAvail && patAvail.length > 0) {
+    const patCheck = patAvail.some(p => p.weekday === weekday && p.start_time.slice(0,5) === startTime.slice(0,5));
+    if(!patCheck) {
+      modalNotice.textContent = 'Conflito: O paciente possui grade cadastrada, mas não marcou disponibilidade neste horário.';
+      modalNotice.className = 'message error'; modalNotice.style.display = 'block';
+      return;
+    }
+  }
+
+  let curr = new Date(start);
+  while(curr.getDay() !== (weekday % 7)) curr.setDate(curr.getDate() + 1);
+
+  const generatedDates = [];
+  while(curr <= end) {
+    generatedDates.push(new Date(curr));
+    curr.setDate(curr.getDate() + 7);
+  }
+
+  if(generatedDates.length === 0) {
+    previewText.textContent = 'Nenhuma data encontrada para este dia da semana no período.';
+    return;
+  }
+
+  const dateStrings = generatedDates.map(d => d.toISOString().split('T')[0]);
+  const { data: conflicts } = await db.from('appointments')
+    .select('appointment_date, intern_id, patient_id')
+    .in('appointment_date', dateStrings)
+    .eq('start_time', startTime)
+    .eq('status', 'agendado');
+
+  if(conflicts && conflicts.length > 0) {
+    const hasConflict = conflicts.some(c => c.intern_id === internId || c.patient_id === patientId);
+    if(hasConflict) {
+      modalNotice.textContent = 'Conflito de agenda: O estagiário ou o paciente já possuem atendimento nestas datas/horários.';
+      modalNotice.className = 'message error'; modalNotice.style.display = 'block';
+      return;
+    }
+  }
+
+  previewText.innerHTML = `Serão gerados <strong>${generatedDates.length} atendimentos semanais</strong> (das <strong>${startTime.slice(0,5)} às ${endTime.slice(0,5)}</strong>).<br><small>Primeira sessão: ${generatedDates[0].toLocaleDateString('pt-BR')} | Última sessão: ${generatedDates[generatedDates.length-1].toLocaleDateString('pt-BR')}</small>`;
+  confirmBtn.disabled = false;
 
   confirmBtn.onclick = async () => {
     confirmBtn.disabled = true; confirmBtn.textContent = 'Gerando...';
-    const patientId = document.getElementById('apptPatient').value;
-    const internId = document.getElementById('apptIntern').value;
-    const startDateStr = document.getElementById('apptStartDate').value;
-    const endDateStr = document.getElementById('apptEndDate').value;
-    const weekday = parseInt(document.getElementById('apptWeekday').value);
-    const [startTime, endTime] = document.getElementById('apptTimeSlot').value.split('|');
-
-    const start = new Date(startDateStr + 'T00:00:00');
-    const end = new Date(endDateStr + 'T00:00:00');
-    let curr = new Date(start);
-    while(curr.getDay() !== (weekday % 7)) curr.setDate(curr.getDate() + 1);
-
-    const newAppts = [];
-    while(curr <= end) {
-      newAppts.push({
-        patient_id: patientId, intern_id: internId,
-        appointment_date: curr.toISOString().split('T')[0],
-        start_time: startTime, end_time: endTime,
-        status: 'agendado', intern_confirmation: 'aguardando',
-        patient_confirmation: 'aguardando', attendance_status: 'pendente'
-      });
-      curr.setDate(curr.getDate() + 7);
-    }
+    const newAppts = generatedDates.map(d => ({
+      patient_id: patientId, intern_id: internId,
+      appointment_date: d.toISOString().split('T')[0],
+      start_time: startTime, end_time: endTime,
+      status: 'agendado', intern_confirmation: 'aguardando',
+      patient_confirmation: 'aguardando', attendance_status: 'pendente'
+    }));
 
     const { error } = await db.from('appointments').insert(newAppts);
     if(error) alert('Erro ao criar: ' + error.message);
-    else { modal.style.display = 'none'; await loadAppointments(); }
+    else { 
+       document.getElementById('ecAppointmentModal').style.display = 'none'; 
+       const { data } = await db.from('appointments').select('id, appointment_date, start_time, end_time, status, intern_confirmation, patient_confirmation, attendance_status, patients(registration_number, full_name), interns(full_name)');
+       renderCalendarView(data || []);
+    }
     confirmBtn.disabled = false; confirmBtn.textContent = 'Validar e Criar Atendimentos';
   };
-};
+}
 
 const ecPrototypeReports = () => {
   content.innerHTML=`<section class="panel"><h2>Relatórios</h2><p class="subtle">Módulo de relatórios e exportação PDF/Excel (Fase 7).</p></section>`;
