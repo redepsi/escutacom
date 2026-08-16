@@ -39,6 +39,27 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px
 .coordinator-simple-menu .menu-card strong{display:block;margin-top:6px}
 .coordinator-simple-menu .menu-card span{font-size:12px;color:#6b7280}
 </style>
+
+<style>
+.agenda-controls{display:flex;align-items:center;gap:10px;margin:12px 0 18px}
+.agenda-controls strong{margin:0 8px}
+.agenda-grid{display:grid;grid-template-columns:80px repeat(5,1fr);border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
+.agenda-grid>div{min-height:74px;border-right:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;padding:10px}
+.agenda-head{background:#f8fafc;font-weight:700;text-align:center;min-height:52px!important}
+.agenda-head small{font-weight:400;color:#667085}
+.agenda-time{font-size:12px;color:#667085;background:#fafafa}
+.appt{border-radius:10px!important;margin:6px!important;min-height:58px!important}
+.appt strong,.appt span,.appt small{display:block}
+.appt span{font-size:12px;margin-top:4px}
+.appt small{font-size:11px;color:#667085;margin-top:2px}
+.appt.confirmed{background:#e8f6ee}
+.appt.waiting{background:#fff4d6}
+.appt.notconfirmed{background:#fbe8e8}
+.modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);align-items:center;justify-content:center;z-index:1000}
+.modal{background:#fff;border-radius:16px;padding:24px;width:min(760px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+.preview-box{padding:14px;border-radius:10px;background:#f4f7fb;margin-top:12px}
+</style>
 </head>
 <body>
 
@@ -417,29 +438,18 @@ const availabilitySettingsPage = async () => {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <h2>Configurações da clínica</h2>
-          <div class="subtle">Você define, por dia, quais intervalos de 1 hora ficam liberados para atendimento.</div>
+          <h2>Quadro de horários da clínica</h2>
+          <div class="subtle">Clique nos intervalos para alternar entre liberado e fechado.</div>
         </div>
         <button id="saveClinicSchedule" class="action">Salvar quadro</button>
       </div>
       <div class="notice">
         Cada intervalo representa <strong>50 minutos de atendimento + 10 minutos de folga</strong>.
-        Horários desligados não aparecem como opção para os estagiários.
+        O estagiário só poderá escolher horários que estiverem liberados aqui.
       </div>
       <div id="clinicScheduleMessage" class="message"></div>
       <div id="clinicScheduleLoading" class="notice">Carregando quadro...</div>
       <div id="clinicScheduleGrid"></div>
-    </section>
-
-    <section class="panel">
-      <div class="toolbar">
-        <div>
-          <h2>Bloqueios específicos</h2>
-          <div class="subtle">Use quando um intervalo normalmente liberado precisar ficar indisponível.</div>
-        </div>
-        <button id="newBlock" class="action">+ Bloquear horário</button>
-      </div>
-      <div id="blocksList">Carregando...</div>
     </section>`;
 
   const loading=document.getElementById('clinicScheduleLoading');
@@ -474,10 +484,12 @@ const availabilitySettingsPage = async () => {
   uniqueSlots.forEach(slot=>{
     table+=`<tr><td><strong>${slot.start}–${slot.end}</strong></td>`;
     days.forEach(d=>{
-      const found=(slots||[]).find(s=>Number(s.weekday)===d.n && s.start_time.slice(0,5)===slot.start && s.end_time.slice(0,5)===slot.end);
+      const found=(slots||[]).find(s=>Number(s.weekday)===d.n &&
+        s.start_time.slice(0,5)===slot.start &&
+        s.end_time.slice(0,5)===slot.end);
       const enabled=!!found?.enabled;
       table+=`<td><label class="slot selectable clinic-slot ${enabled?'selected':''}">
-        <input type="checkbox" data-slot-id="${found?.id||''}" data-day="${d.n}" data-start="${slot.start}" data-end="${slot.end}" ${enabled?'checked':''}>
+        <input type="checkbox" data-slot-id="${found?.id||''}" ${enabled?'checked':''}>
         <span>${enabled?'🟢 Liberado':'⚪ Fechado'}</span>
       </label></td>`;
     });
@@ -505,6 +517,7 @@ const availabilitySettingsPage = async () => {
     }));
 
     for(const item of updates){
+      if(!item.id) continue;
       const {error}=await db.from('clinic_schedule_slots').update({
         enabled:item.enabled,
         updated_by:currentProfile.id,
@@ -518,61 +531,102 @@ const availabilitySettingsPage = async () => {
       }
     }
 
-    msg.textContent='Configurações salvo com sucesso.';
+    msg.textContent='Quadro de horários salvo com sucesso.';
     msg.className='message success'; msg.style.display='block';
     btn.disabled=false;
   };
+};
 
-  const loadBlocks=async()=>{
-    const wrap=document.getElementById('blocksList');
-    const {data,error}=await db.from('schedule_blocks')
-      .select('id,weekday,start_time,end_time,reason')
-      .order('weekday').order('start_time');
+const agendaMockPage = () => {
+  content.innerHTML = `
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <h2>Agenda</h2>
+          <div class="subtle">Visualização semanal dos atendimentos.</div>
+        </div>
+        <button id="newAppointmentBtn" class="action">+ Novo agendamento</button>
+      </div>
+      <div class="agenda-controls">
+        <button class="action secondary" id="prevWeek">‹</button>
+        <strong>10 a 14 de agosto de 2026</strong>
+        <button class="action secondary" id="nextWeek">›</button>
+        <button class="action secondary" id="todayBtn">Hoje</button>
+      </div>
+      <div class="agenda-grid">
+        <div class="agenda-head time-col">Horário</div>
+        <div class="agenda-head">Seg<br><small>10/08</small></div>
+        <div class="agenda-head">Ter<br><small>11/08</small></div>
+        <div class="agenda-head">Qua<br><small>12/08</small></div>
+        <div class="agenda-head">Qui<br><small>13/08</small></div>
+        <div class="agenda-head">Sex<br><small>14/08</small></div>
 
-    if(error){wrap.innerHTML=`<div class="message error">${escapeHtml(error.message)}</div>`;return;}
+        <div class="agenda-time">13:00</div>
+        <div></div>
+        <div class="appt confirmed"><strong>13:00–14:00</strong><span>Paciente #00342</span><small>Ana Beatriz</small></div>
+        <div></div><div></div><div></div>
 
-    const names=['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
+        <div class="agenda-time">14:00</div>
+        <div class="appt confirmed"><strong>14:00–15:00</strong><span>Paciente #00501</span><small>João Pedro</small></div>
+        <div></div>
+        <div class="appt waiting"><strong>14:00–15:00</strong><span>Paciente #00418</span><small>Maria Clara</small></div>
+        <div></div><div></div>
 
-    wrap.innerHTML=`<div style="overflow:auto"><table>
-      <tr><th>Dia</th><th>Horário</th><th>Motivo</th><th></th></tr>
-      ${(data||[]).map(b=>`<tr>
-        <td>${names[b.weekday]}</td>
-        <td>${b.start_time.slice(0,5)}–${b.end_time.slice(0,5)}</td>
-        <td>${escapeHtml(b.reason||'—')}</td>
-        <td><button class="action secondary delete-block" data-id="${b.id}" style="padding:6px 10px">Excluir</button></td>
-      </tr>`).join('')||'<tr><td colspan="4">Nenhum bloqueio cadastrado.</td></tr>'}
-    </table></div>`;
+        <div class="agenda-time">15:00</div>
+        <div></div>
+        <div class="appt notconfirmed"><strong>15:00–16:00</strong><span>Paciente #00277</span><small>Lucas Almeida</small></div>
+        <div></div>
+        <div class="appt confirmed"><strong>15:00–16:00</strong><span>Paciente #00192</span><small>Beatriz Souza</small></div>
+        <div></div>
 
-    wrap.querySelectorAll('.delete-block').forEach(btn=>btn.onclick=async()=>{
-      if(!confirm('Excluir este bloqueio?'))return;
-      const {error}=await db.from('schedule_blocks').delete().eq('id',btn.dataset.id);
-      if(error)alert('Não foi possível excluir: '+error.message);
-      else loadBlocks();
-    });
+        <div class="agenda-time">16:00</div>
+        <div></div><div></div>
+        <div class="appt confirmed"><strong>16:00–17:00</strong><span>Paciente #00604</span><small>Rafael Costa</small></div>
+        <div></div><div></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar"><h2>Próximos atendimentos</h2></div>
+      <table>
+        <tr><th>Data</th><th>Horário</th><th>Paciente</th><th>Estagiário</th><th>Confirmação</th><th>Status</th></tr>
+        <tr><td>10/08</td><td>14:00</td><td>#00342</td><td>Ana Beatriz</td><td><span class="badge green">Confirmado</span></td><td>Agendado</td></tr>
+        <tr><td>11/08</td><td>13:00</td><td>#00501</td><td>João Pedro</td><td><span class="badge yellow">Aguardando</span></td><td>Agendado</td></tr>
+        <tr><td>12/08</td><td>14:00</td><td>#00418</td><td>Maria Clara</td><td><span class="badge yellow">Aguardando</span></td><td>Agendado</td></tr>
+      </table>
+    </section>
+
+    <div id="appointmentModal" class="modal-backdrop" style="display:none">
+      <div class="modal">
+        <div class="toolbar"><h2>Novo agendamento</h2><button id="closeAppointment" class="action secondary">Fechar</button></div>
+        <div class="formgrid">
+          <div class="field"><label>Paciente</label><select id="mockPatient"><option>Paciente #00342 — Ana Beatriz</option><option>Paciente #00501 — João Pedro</option><option>Paciente #00418 — Maria Clara</option></select></div>
+          <div class="field"><label>Estagiário</label><select id="mockIntern"><option>João Pedro</option><option>Ana Beatriz</option><option>Lucas Almeida</option></select></div>
+          <div class="field"><label>Início do acompanhamento</label><input id="mockStart" type="date" value="2026-08-10"></div>
+          <div class="field"><label>Fim do acompanhamento</label><input id="mockEnd" type="date" value="2026-12-14"></div>
+          <div class="field"><label>Dia da semana</label><select id="mockDay"><option>Segunda-feira</option><option>Terça-feira</option><option>Quarta-feira</option><option>Quinta-feira</option><option>Sexta-feira</option></select></div>
+          <div class="field"><label>Horário</label><select id="mockTime"><option>13:00–14:00</option><option>14:00–15:00</option><option>15:00–16:00</option><option>16:00–17:00</option></select></div>
+        </div>
+        <div class="notice" style="margin-top:16px">
+          <strong>Prévia:</strong> serão gerados automaticamente os atendimentos semanais dentro do período informado.
+          Cada atendimento ocupa 1 hora: 50 minutos de atendimento + 10 minutos de intervalo.
+        </div>
+        <div id="mockPreview" class="preview-box">Serão gerados aproximadamente <strong>18 atendimentos</strong>.</div>
+        <div class="modal-actions"><button id="cancelAppointment" class="action secondary">Cancelar</button><button id="confirmAppointment" class="action">Confirmar agendamento</button></div>
+      </div>
+    </div>`;
+
+  const modal=document.getElementById('appointmentModal');
+  document.getElementById('newAppointmentBtn').onclick=()=>modal.style.display='flex';
+  document.getElementById('closeAppointment').onclick=()=>modal.style.display='none';
+  document.getElementById('cancelAppointment').onclick=()=>modal.style.display='none';
+  document.getElementById('confirmAppointment').onclick=()=>{
+    alert('Prévia validada. A gravação dos atendimentos no banco será feita somente depois que este fluxo for aprovado.');
+    modal.style.display='none';
   };
-
-  await loadBlocks();
-
-  document.getElementById('newBlock').onclick=async()=>{
-    const day=prompt('Dia da semana: 1=segunda, 2=terça, 3=quarta, 4=quinta, 5=sexta','1');
-    if(day===null)return;
-    const start=prompt('Horário inicial (ex.: 13:00)','13:00');
-    if(start===null)return;
-    const end=prompt('Horário final (ex.: 14:00)','14:00');
-    if(end===null)return;
-    const reason=prompt('Motivo do bloqueio (opcional)','');
-
-    const {error}=await db.from('schedule_blocks').insert({
-      weekday:Number(day),
-      start_time:start+':00',
-      end_time:end+':00',
-      reason:reason||null,
-      created_by:currentProfile.id
-    });
-
-    if(error)alert('Não foi possível criar o bloqueio: '+error.message);
-    else loadBlocks();
-  };
+  document.getElementById('prevWeek').onclick=()=>alert('Na versão conectada, esta ação navegará para a semana anterior.');
+  document.getElementById('nextWeek').onclick=()=>alert('Na versão conectada, esta ação navegará para a próxima semana.');
+  document.getElementById('todayBtn').onclick=()=>alert('Na versão conectada, esta ação voltará para a semana atual.');
 };
 
 const coordinatorPages = {
@@ -604,9 +658,8 @@ const coordinatorPages = {
       <p style="font-size:13px;color:#667085">Cadastro com inscrição, idade, gênero, nome opcional e disponibilidade opcional.</p>
     </section>
   `,
-  agenda: `
-    <section class="panel"><h2>Agenda</h2><p style="font-size:13px;color:#667085">Calendário integrado aos agendamentos reais será conectado na próxima etapa.</p></section>
-  `,
+  agenda: `<section class="panel"><h2>Agenda</h2></section>`,
+
   relatorio: `
     <section class="hero"><h2>Relatórios</h2><p>Selecione um estagiário para visualizar horas, pacientes e atendimentos realizados.</p></section>
   `,
@@ -692,6 +745,12 @@ function buildNav(pages) {
 }
 
 function render() {
+  if (currentContext === 'coordenacao' && currentPage === 'agenda') {
+    title.textContent = 'Agenda';
+    nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
+    agendaMockPage();
+    return;
+  }
   if (currentPage === 'disponibilidade') {
     title.textContent = currentContext === 'estagiario' ? 'Minha disponibilidade' : 'Disponibilidade dos estagiários';
     nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
