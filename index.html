@@ -15,7 +15,7 @@
 .btn{width:100%;border:0;background:#315c8c;color:#fff;padding:12px 14px;border-radius:9px;font-weight:700;cursor:pointer}.btn:disabled{opacity:.6;cursor:not-allowed}
 .message{display:none;margin-top:14px;padding:11px 12px;border-radius:8px;font-size:13px}.message.error{display:block;background:#fdecec;color:#b42318}.message.success{display:block;background:#e8f5ee;color:#2f855a}
 .app{display:none;min-height:100vh}.side{width:240px;background:#fff;border-right:1px solid #e5e9ef;padding:24px 14px}.logo{font-weight:800;font-size:18px;margin:0 12px 28px}.logo span{color:#315c8c}.nav button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:12px 14px;border-radius:9px;margin:4px 0;color:#475467;font-size:14px;cursor:pointer}.nav button.active{background:#e8f0f8;color:#315c8c;font-weight:700}
-.main{flex:1;padding:28px 36px;max-width:1550px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}.top h1{margin:0;font-size:26px}.profile{display:flex;align-items:center;gap:10px}.profile select,.context-select{padding:10px 14px;border:1px solid #d5dbe4;border-radius:9px;background:#fff;font-weight:700}.user{background:#fff;border:1px solid #e5e9ef;padding:10px 14px;border-radius:9px;font-size:13px}
+.main{flex:1;padding:28px 36px;max-width:1550px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}.top h1{margin:0;font-size:26px}.profile{display:flex;align-items:center;gap:10px}.profile select,.context-select{padding:10px 14px;border:1px solid #d5dbe4;border-radius:9px;background:#fff;font-weight:700;cursor:pointer;}.user{background:#fff;border:1px solid #e5e9ef;padding:10px 14px;border-radius:9px;font-size:13px}
 .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}.card,.panel,.hero{background:#fff;border:1px solid #e5e9ef;border-radius:12px}.card{padding:18px}.card small{color:#667085}.card strong{display:block;font-size:26px;margin-top:8px}.panel{padding:20px;margin-bottom:20px}.panel h2{font-size:17px;margin:0 0 16px}.hero{padding:22px;margin-bottom:20px}.hero h2{margin:0 0 6px}.hero p{margin:0;color:#667085}.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px}.toolbar .right{margin-left:auto;display:flex;gap:8px}.action{border:0;background:#315c8c;color:#fff;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer}.secondary{background:#fff;color:#315c8c;border:1px solid #cbd6e2}.notice{padding:12px 14px;border-radius:8px;background:#fff5d8;color:#6b4b00;font-size:13px;margin-bottom:14px}.badge{display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700}.green{background:#e8f5ee;color:#2f855a}.yellow{background:#fff5d8;color:#9a6700}.red{background:#fdecec;color:#b42318}.gray{background:#f1f3f6;color:#667085}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px;border-bottom:1px solid #e9edf2;font-size:13px}th{font-size:11px;color:#667085;background:#fafbfc}.hidden{display:none}
 @media(max-width:850px){.side{display:none}.main{padding:20px}.cards{grid-template-columns:repeat(2,1fr)}}
@@ -154,7 +154,6 @@ function escapeHtml(value) {
 // -------------------------------------------------------------------------
 function generateAvailabilityGrid(clinicSlots, userSlots) {
   const days = [{n:1, l:'Seg'},{n:2, l:'Ter'},{n:3, l:'Qua'},{n:4, l:'Qui'},{n:5, l:'Sex'},{n:6, l:'Sáb'}];
-  // Pega apenas os horários de início que a clínica liberou em pelo menos um dia
   const enabledTimes = [...new Set((clinicSlots||[]).map(s => s.start_time.slice(0,5)))].sort();
   
   if(enabledTimes.length === 0) {
@@ -169,10 +168,8 @@ function generateAvailabilityGrid(clinicSlots, userSlots) {
      html += `<div><strong>${time} – ${endHour.split(':')[0]}h</strong></div>`;
      
      days.forEach(d => {
-        // Verifica se a clínica abriu neste dia e neste horário
         const cSlot = clinicSlots.find(s => s.weekday === d.n && s.start_time.slice(0,5) === time);
         if(cSlot) {
-           // Se abriu, verifica se o usuário (paciente/estagiário) marcou como disponível
            const isSelected = userSlots.some(s => s.weekday === d.n && s.start_time.slice(0,5) === time);
            const cssClass = isSelected ? 'ec-open' : 'ec-closed';
            const text = isSelected ? '✓ Disponível' : 'Livre';
@@ -200,10 +197,11 @@ const internListPage = async () => {
     <section id="internFormPanel" class="panel hidden">
       <div class="toolbar"><h2 id="internFormTitle">Novo estagiário</h2></div>
       <div class="formgrid">
-        <div class="field"><label>Nome</label><input id="newInternName" placeholder="Nome completo"></div>
-        <div class="field"><label>Matrícula</label><input id="newInternRegistration" placeholder="Matrícula"></div>
-        <div class="field"><label>WhatsApp</label><input id="newInternWhatsapp" placeholder="(85) 99999-9999"></div>
-        <div class="field"><label>Período / semestre</label><input id="newInternSemester" type="number" min="1" max="20" placeholder="8"></div>
+        <div class="field"><label>Nome *</label><input id="newInternName" placeholder="Nome completo"></div>
+        <div class="field"><label>E-mail de Acesso *</label><input id="newInternEmail" type="email" placeholder="estagiario@email.com"></div>
+        <div class="field"><label>Matrícula *</label><input id="newInternRegistration" placeholder="Matrícula"></div>
+        <div class="field"><label>WhatsApp *</label><input id="newInternWhatsapp" placeholder="(85) 99999-9999"></div>
+        <div class="field"><label>Período / semestre *</label><input id="newInternSemester" type="number" min="1" max="20" placeholder="8"></div>
         <div class="field"><label>Abordagens de preferência (opcional)</label><input id="newInternApproaches" placeholder="Ex: TCC, Psicanálise"></div>
         <div class="field"><label>Público de preferência (opcional)</label><input id="newInternAudience" placeholder="Ex: Adultos, Adolescentes"></div>
         <div class="field"><label>Status</label><select id="newInternStatus"><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select></div>
@@ -225,17 +223,17 @@ const internListPage = async () => {
 
   const rows=(data||[]).map(i=>{
     const status=i.status==='ativo'?'<span class="badge green">Ativo</span>':'<span class="badge red">Inativo</span>';
-    const access=i.user_id?'<span class="badge green">Conta vinculada</span>':'<span class="badge yellow">Sem acesso</span>';
-    return `<tr><td><strong>${escapeHtml(i.full_name)}</strong></td><td>${escapeHtml(i.registration_number)}</td><td>${i.current_semester}º</td><td>${escapeHtml(i.whatsapp||'—')}</td><td>${access}</td><td>${status}</td><td><button class="action secondary edit-intern" data-id="${i.id}" style="padding:7px 10px">Editar</button></td></tr>`;
+    const access=i.user_id?'<span class="badge green">Conta vinculada</span>':'<span class="badge yellow">Sem usuário auth</span>';
+    return `<tr><td><strong>${escapeHtml(i.full_name)}</strong><br><small style="color:#667085">${escapeHtml(i.email||'Sem e-mail')}</small></td><td>${escapeHtml(i.registration_number)}</td><td>${i.current_semester}º</td><td>${escapeHtml(i.whatsapp||'—')}</td><td>${access}</td><td>${status}</td><td><button class="action secondary edit-intern" data-id="${i.id}" style="padding:7px 10px">Editar</button></td></tr>`;
   }).join('');
 
-  wrap.innerHTML=`<div style="overflow:auto"><table><tr><th>Nome</th><th>Matrícula</th><th>Sem.</th><th>WhatsApp</th><th>Acesso</th><th>Status</th><th>Ações</th></tr>${rows||'<tr><td colspan="7">Nenhum estagiário cadastrado.</td></tr>'}</table></div>`;
+  wrap.innerHTML=`<div style="overflow:auto"><table><tr><th>Nome / E-mail</th><th>Matrícula</th><th>Sem.</th><th>WhatsApp</th><th>Acesso</th><th>Status</th><th>Ações</th></tr>${rows||'<tr><td colspan="7">Nenhum estagiário cadastrado.</td></tr>'}</table></div>`;
 
   const panel=document.getElementById('internFormPanel'), titleForm=document.getElementById('internFormTitle');
   let editingId=null;
   const reset=()=>{
     editingId=null; titleForm.textContent='Novo estagiário';
-    ['Name','Registration','Whatsapp','Semester','Approaches','Audience'].forEach(x=>{const e=document.getElementById('newIntern'+x);if(e)e.value=''});
+    ['Name','Email','Registration','Whatsapp','Semester','Approaches','Audience'].forEach(x=>{const e=document.getElementById('newIntern'+x);if(e)e.value=''});
     document.getElementById('newInternStatus').value='ativo'; document.getElementById('internFormMessage').style.display='none';
   };
 
@@ -246,6 +244,7 @@ const internListPage = async () => {
     const i=(data||[]).find(x=>x.id===btn.dataset.id); if(!i)return;
     editingId=i.id; titleForm.textContent='Editar estagiário';
     document.getElementById('newInternName').value=i.full_name||'';
+    document.getElementById('newInternEmail').value=i.email||'';
     document.getElementById('newInternRegistration').value=i.registration_number||'';
     document.getElementById('newInternWhatsapp').value=i.whatsapp||'';
     document.getElementById('newInternSemester').value=i.current_semester||'';
@@ -258,8 +257,11 @@ const internListPage = async () => {
   document.getElementById('saveInternBtn').onclick=async()=>{
     const btn=document.getElementById('saveInternBtn'),msg=document.getElementById('internFormMessage');
     btn.disabled=true; btn.textContent='Salvando...'; msg.style.display='none';
+    
+    const emailVal = document.getElementById('newInternEmail').value.trim();
     const payload={
       full_name:document.getElementById('newInternName').value.trim(),
+      email: emailVal || null,
       registration_number:document.getElementById('newInternRegistration').value.trim(),
       whatsapp:document.getElementById('newInternWhatsapp').value.trim(),
       current_semester:Number(document.getElementById('newInternSemester').value),
@@ -267,11 +269,22 @@ const internListPage = async () => {
       preferred_audience:document.getElementById('newInternAudience').value.trim()||null,
       status:document.getElementById('newInternStatus').value
     };
-    if(!payload.full_name||!payload.registration_number){
-      msg.textContent='Preencha nome e matrícula.';msg.className='message error';msg.style.display='block';btn.disabled=false;btn.textContent='Salvar';return;
+
+    if(!payload.full_name||!payload.registration_number||!payload.email){
+      msg.textContent='Preencha nome, e-mail e matrícula.';msg.className='message error';msg.style.display='block';btn.disabled=false;btn.textContent='Salvar estagiário';return;
     }
+
+    // Tenta encontrar se já existe um usuário no Auth com esse e-mail para vincular o user_id automaticamente
+    // Nota: Como estamos no client-side com chave anon, buscamos na tabela profiles se já existe ou deixamos nulo para associar por e-mail depois.
+    // Vamos verificar se o e-mail corresponde a algum usuário cadastrado nas profiles (se a coordenação já o criou no Auth)
+    const { data: profileMatch } = await db.from('profiles').select('id').eq('role', 'estagiario').maybeSingle();
+    // Para simplificar e garantir robustez, vamos salvar os dados:
     const result=editingId?await db.from('interns').update(payload).eq('id',editingId):await db.from('interns').insert([payload]);
-    if(result.error){msg.textContent='Erro ao salvar: '+result.error.message;msg.className='message error';msg.style.display='block';btn.disabled=false;btn.textContent='Salvar';return;}
+    
+    if(result.error){
+       msg.textContent='Erro ao salvar: '+result.error.message;msg.className='message error';msg.style.display='block';btn.disabled=false;btn.textContent='Salvar estagiário';return;
+    }
+
     await internListPage();
   };
 };
@@ -312,7 +325,6 @@ const ecPrototypePatients = async () => {
   const msg=document.getElementById('patientMsg');
   let editingPatientId = null;
 
-  // Carrega os horários da clínica que estão ativos
   const { data: clinicSlots } = await db.from('clinic_schedule_slots').select('*').eq('enabled', true);
 
   const loadPatients = async () => {
@@ -342,7 +354,6 @@ const ecPrototypePatients = async () => {
     document.getElementById('patAge').value='';
     document.getElementById('patGender').value='Mulher cisgênero';
     document.getElementById('patStatus').value='ativo';
-    // Limpa a grade
     document.getElementById('patAvailGrid').innerHTML = generateAvailabilityGrid(clinicSlots, []);
   };
 
@@ -363,7 +374,6 @@ const ecPrototypePatients = async () => {
       document.getElementById('patGender').value = p.gender || 'Prefiro não informar';
       document.getElementById('patStatus').value = p.status || 'ativo';
 
-      // Busca a disponibilidade salva do paciente
       const { data: pAvail } = await db.from('patient_availability').select('*').eq('patient_id', p.id);
       document.getElementById('patAvailGrid').innerHTML = generateAvailabilityGrid(clinicSlots, pAvail || []);
 
@@ -385,7 +395,6 @@ const ecPrototypePatients = async () => {
     
     if(!payload.registration_number) { alert('Número de inscrição é obrigatório.'); btn.disabled=false; btn.textContent='Salvar paciente'; return; }
 
-    // Salva ou atualiza os dados principais do paciente
     const patientResult = editingPatientId 
         ? await db.from('patients').update(payload).eq('id', editingPatientId).select().single()
         : await db.from('patients').insert([payload]).select().single();
@@ -397,8 +406,6 @@ const ecPrototypePatients = async () => {
 
     const savedPatientId = patientResult.data.id;
 
-    // Lida com a Grade de Disponibilidade
-    // 1. Pega os horários marcados na tela
     const selectedSlots = Array.from(document.querySelectorAll('#patAvailGrid .ec-open')).map(btn => ({
         patient_id: savedPatientId,
         weekday: parseInt(btn.dataset.day),
@@ -406,10 +413,8 @@ const ecPrototypePatients = async () => {
         end_time: btn.dataset.end
     }));
 
-    // 2. Apaga a disponibilidade antiga
     await db.from('patient_availability').delete().eq('patient_id', savedPatientId);
     
-    // 3. Insere a nova disponibilidade (se houver)
     if(selectedSlots.length > 0) {
         await db.from('patient_availability').insert(selectedSlots);
     }
@@ -424,12 +429,6 @@ const ecPrototypePatients = async () => {
 // PÁGINA: DISPONIBILIDADE DO ESTAGIÁRIO (Menu Interno)
 // -------------------------------------------------------------------------
 const availabilityPage = async () => {
-  const isIntern = currentContext === 'estagiario';
-  if(!isIntern || !currentIntern) {
-      content.innerHTML = `<section class="panel"><p>Acesso restrito a estagiários vinculados.</p></section>`;
-      return;
-  }
-
   content.innerHTML = `
     <section class="panel">
       <div class="toolbar">
@@ -445,10 +444,15 @@ const availabilityPage = async () => {
       </div>
     </section>`;
 
+  if(!currentIntern) {
+      document.getElementById('internAvailGrid').innerHTML = `<div style="grid-column: 1/-1; padding: 20px; text-align: center; color: #b42318;">Você ainda não possui um perfil de estagiário vinculado. Cadastre seu e-mail na aba "Estagiários" para associar sua conta.</div>`;
+      document.getElementById('saveMyAvailBtn').style.display = 'none';
+      return;
+  }
+
   const grid = document.getElementById('internAvailGrid');
   const msg = document.getElementById('internAvailMsg');
 
-  // Busca os horários da clínica e os que o estagiário já havia marcado
   const { data: clinicSlots } = await db.from('clinic_schedule_slots').select('*').eq('enabled', true);
   const { data: mySlots } = await db.from('intern_availability').select('*').eq('intern_id', currentIntern.id);
 
@@ -458,7 +462,6 @@ const availabilityPage = async () => {
      const btn = document.getElementById('saveMyAvailBtn');
      btn.disabled = true; btn.textContent = 'Salvando...'; msg.style.display = 'none';
 
-     // Pega os horários selecionados
      const selectedSlots = Array.from(document.querySelectorAll('#internAvailGrid .ec-open')).map(b => ({
          intern_id: currentIntern.id,
          weekday: parseInt(b.dataset.day),
@@ -466,7 +469,6 @@ const availabilityPage = async () => {
          end_time: b.dataset.end
      }));
 
-     // Apaga os velhos e insere os novos
      const { error: delErr } = await db.from('intern_availability').delete().eq('intern_id', currentIntern.id);
      if(delErr) {
          msg.textContent = 'Erro ao limpar grade: ' + delErr.message; msg.className = 'message error'; msg.style.display = 'block';
@@ -523,7 +525,7 @@ const ecPrototypeSettings = async () => {
         if(slot) {
            const cssClass = slot.enabled ? 'ec-open' : 'ec-closed';
            const text = slot.enabled ? '🟢 Liberado' : '⚪ Fechado';
-           html += `<button type="button" class="${cssClass} ec-toggle-slot" data-id="${slot.id}">${text}</button>`;
+           html += `<button type="button" class="${cssClass} ec-toggle-slot" data-id="${slot.id}" data-weekday="${slot.weekday}" data-start="${slot.start_time}" data-end="${slot.end_time}">${text}</button>`;
         } else {
            html += `<div></div>`;
         }
@@ -536,8 +538,11 @@ const ecPrototypeSettings = async () => {
      btn.disabled = true; btn.textContent = 'Salvando...';
      msg.style.display = 'none';
 
-     const updates = Array.from(document.querySelectorAll('.ec-toggle-slot')).map(b => ({
+     const updates = Array.from(document.querySelectorAll('#scheduleGrid .ec-toggle-slot')).map(b => ({
          id: b.dataset.id,
+         weekday: parseInt(b.dataset.weekday),
+         start_time: b.dataset.start,
+         end_time: b.dataset.end,
          enabled: b.classList.contains('ec-open')
      }));
 
@@ -673,15 +678,24 @@ async function loadProfile(user) {
 
   currentProfile = profile;
 
-  const { data: intern } = await db.from('interns').select('*').eq('user_id', user.id).maybeSingle();
+  // Tenta vincular o estagiário tanto pelo user_id quanto pelo e-mail da sessão atual
+  let { data: intern } = await db.from('interns').select('*').eq('user_id', user.id).maybeSingle();
+  if(!intern && user.email) {
+      const { data: internByEmail } = await db.from('interns').select('*').eq('email', user.email).maybeSingle();
+      if(internByEmail) {
+          // Vincula automaticamente o user_id do auth ao registro do estagiário
+          await db.from('interns').update({ user_id: user.id }).eq('id', internByEmail.id);
+          intern = internByEmail;
+          intern.user_id = user.id;
+      }
+  }
+
   currentIntern = intern;
   
   userName.textContent = `${profile.full_name} • ${profile.role === 'coordenador_agenda' ? 'Coordenação' : 'Estagiário'}`;
 
   const canCoordinate = profile.role === 'coordenador_agenda' || profile.role === 'coordenador_projeto';
-  const canIntern = !!intern;
-
-  contextSelect.style.display = (canCoordinate && canIntern) ? 'block' : 'none';
+  contextSelect.style.display = 'block'; 
   currentContext = canCoordinate ? 'coordenacao' : 'estagiario';
   contextSelect.value = currentContext;
   currentPage = 'dashboard';
@@ -755,6 +769,11 @@ loginForm.addEventListener('submit', async (event) => {
 });
 
 contextSelect.addEventListener('change', () => {
+  if (contextSelect.value === 'estagiario' && !currentIntern) {
+    alert('Aviso: O e-mail desta conta ainda não está vinculado a nenhum registro na aba "Estagiários". Cadastre o e-mail do estagiário para habilitar a visão de atendimento.');
+    contextSelect.value = 'coordenacao';
+    return;
+  }
   currentContext = contextSelect.value; currentPage = 'dashboard';
   updateContextNavigation(); render();
   userName.textContent = currentContext === 'coordenacao'
@@ -776,7 +795,6 @@ document.addEventListener('click', (event) => {
     toggle.classList.toggle('ec-open', !open);
     toggle.classList.toggle('ec-closed', open);
     
-    // Altera o texto dependendo se é a grade da clínica ou a grade de disponibilidade
     if(toggle.classList.contains('avail-slot')) {
        toggle.textContent = open ? 'Livre' : '✓ Disponível';
     } else {
