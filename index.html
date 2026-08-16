@@ -60,6 +60,30 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px
 .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
 .preview-box{padding:14px;border-radius:10px;background:#f4f7fb;margin-top:12px}
 </style>
+
+<style>
+.ec-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.ec-card{background:#fff;border:1px solid #e6e8ec;border-radius:14px;padding:16px}
+.ec-card h3{margin:0 0 6px}.ec-muted{font-size:12px;color:#667085}
+.ec-calendar{display:grid;grid-template-columns:80px repeat(6,1fr);border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
+.ec-calendar>div{padding:10px;border-right:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;min-height:68px}
+.ec-head{background:#f8fafc;font-weight:700;text-align:center;min-height:48px!important}
+.ec-open{background:#e9f7ef;border-radius:9px;font-weight:700;cursor:pointer}
+.ec-closed{background:#f3f4f6;color:#98a2b3;border-radius:9px;cursor:pointer}
+.ec-appt{border-radius:9px;padding:9px!important;min-height:58px!important}
+.ec-confirmed{background:#e9f7ef}.ec-wait{background:#fff4d6}.ec-no{background:#fdecec}
+.ec-appt strong,.ec-appt span,.ec-appt small{display:block}
+.ec-appt span{font-size:12px;margin-top:3px}.ec-appt small{font-size:11px;color:#667085;margin-top:2px}
+.ec-pills{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.ec-pill{padding:7px 10px;border-radius:999px;background:#f2f4f7;font-size:12px}
+.ec-pill.active{background:#e7f3ec;color:#176b36;font-weight:700}
+.ec-status{display:inline-block;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:700}
+.ec-green{background:#e7f3ec;color:#176b36}.ec-yellow{background:#fff4d6;color:#8a5b00}.ec-red{background:#fdecec;color:#a12b2b}.ec-gray{background:#eef0f2;color:#475467}
+.ec-modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:1000}
+.ec-modal-box{background:white;border-radius:16px;padding:24px;width:min(820px,94vw);max-height:90vh;overflow:auto}
+.ec-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+@media(max-width:900px){.ec-grid{grid-template-columns:1fr}.ec-calendar{grid-template-columns:65px repeat(6,minmax(120px,1fr))}}
+</style>
 </head>
 <body>
 
@@ -629,6 +653,116 @@ const agendaMockPage = () => {
   document.getElementById('todayBtn').onclick=()=>alert('Na versão conectada, esta ação voltará para a semana atual.');
 };
 
+
+const ecPrototypeAgenda = () => {
+  content.innerHTML=`
+  <section class="panel">
+    <div class="toolbar">
+      <div><h2>Agenda</h2><div class="ec-muted">Visualize os atendimentos por dia, semana ou mês.</div></div>
+      <button class="action" id="ecNewAppointment">+ Novo agendamento</button>
+    </div>
+    <div class="ec-pills">
+      <button class="action secondary ec-view active" data-view="dia">Dia</button>
+      <button class="action secondary ec-view" data-view="semana">Semana</button>
+      <button class="action secondary ec-view" data-view="mes">Mês</button>
+      <button class="action secondary ec-filter">Todos os estagiários</button>
+      <button class="action secondary ec-filter">Todos os pacientes</button>
+    </div>
+    <div class="ec-calendar">
+      <div class="ec-head">Horário</div><div class="ec-head">Seg</div><div class="ec-head">Ter</div><div class="ec-head">Qua</div><div class="ec-head">Qui</div><div class="ec-head">Sex</div><div class="ec-head">Sáb</div>
+      <div>13:00</div><div></div><div class="ec-appt ec-confirmed"><strong>13–14h</strong><span>#00342</span><small>João • Confirmado</small></div><div></div><div></div><div></div><div></div>
+      <div>14:00</div><div class="ec-appt ec-confirmed"><strong>14–15h</strong><span>#00501</span><small>Ana • Confirmado</small></div><div></div><div class="ec-appt ec-wait"><strong>14–15h</strong><span>#00418</span><small>Lucas • Aguardando</small></div><div></div><div></div><div></div>
+      <div>15:00</div><div></div><div class="ec-appt ec-no"><strong>15–16h</strong><span>#00277</span><small>João • Não confirmado</small></div><div></div><div></div><div></div><div></div>
+      <div>16:00</div><div></div><div></div><div class="ec-appt ec-confirmed"><strong>16–17h</strong><span>#00604</span><small>Ana • Confirmado</small></div><div></div><div></div><div></div>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="toolbar"><h2>Confirmações pendentes</h2><span class="ec-status ec-yellow">3 atendimentos</span></div>
+    <table><tr><th>Data</th><th>Paciente</th><th>Estagiário</th><th>Confirmação</th><th>Prazo</th></tr>
+    <tr><td>17/08</td><td>#00342</td><td>João</td><td><span class="ec-status ec-yellow">Aguardando</span></td><td>16/08</td></tr>
+    <tr><td>18/08</td><td>#00418</td><td>Lucas</td><td><span class="ec-status ec-yellow">Aguardando</span></td><td>17/08</td></tr></table>
+  </section>
+  <div class="ec-modal" id="ecAppointmentModal"><div class="ec-modal-box">
+    <div class="toolbar"><h2>Novo agendamento</h2><button class="action secondary" id="ecClose">Fechar</button></div>
+    <div class="formgrid">
+      <div class="field"><label>Paciente</label><select><option>#00342 — Ana Beatriz</option><option>#00418 — Maria Clara</option></select></div>
+      <div class="field"><label>Estagiário</label><select><option>João Pedro</option><option>Ana Beatriz</option><option>Lucas Almeida</option><option>Todos</option></select></div>
+      <div class="field"><label>Início</label><input type="date" value="2026-08-17"></div>
+      <div class="field"><label>Fim</label><input type="date" value="2026-12-18"></div>
+      <div class="field"><label>Dia da semana</label><select><option>Segunda-feira</option><option>Terça-feira</option><option>Quarta-feira</option><option>Quinta-feira</option><option>Sexta-feira</option><option>Sábado</option></select></div>
+      <div class="field"><label>Horário</label><select><option>13:00–14:00</option><option>14:00–15:00</option><option>15:00–16:00</option><option>16:00–17:00</option></select></div>
+    </div>
+    <div class="notice" style="margin-top:14px">O sistema verificará automaticamente: horário liberado pela clínica, disponibilidade do estagiário, disponibilidade do paciente e conflitos.</div>
+    <div class="ec-card" style="margin-top:12px"><strong>Prévia</strong><p>18 atendimentos serão criados semanalmente no período selecionado.</p><small>17/08 · 24/08 · 31/08 · … · 14/12</small></div>
+    <div class="ec-actions"><button class="action secondary" id="ecCancel">Cancelar</button><button class="action" id="ecConfirm">Confirmar e gerar atendimentos</button></div>
+  </div></div>`;
+
+  const modal=document.getElementById('ecAppointmentModal');
+  document.getElementById('ecNewAppointment').onclick=()=>modal.style.display='flex';
+  document.getElementById('ecClose').onclick=()=>modal.style.display='none';
+  document.getElementById('ecCancel').onclick=()=>modal.style.display='none';
+  document.getElementById('ecConfirm').onclick=()=>{
+    alert('Protótipo validado. A geração real será conectada ao banco depois da auditoria.');
+    modal.style.display='none';
+  };
+};
+
+const ecPrototypePatients = () => {
+  content.innerHTML=`
+  <section class="panel"><div class="toolbar"><div><h2>Pacientes</h2><div class="ec-muted">Cadastro e disponibilidade dos pacientes.</div></div><button class="action" id="ecNewPatient">+ Novo paciente</button></div>
+  <table><tr><th>Inscrição</th><th>Nome</th><th>Idade</th><th>Gênero</th><th>Disponibilidade</th><th>Status</th></tr>
+  <tr><td>#00342</td><td>Ana Beatriz</td><td>24</td><td>Mulher cisgênero</td><td>Seg–Qua, 13h–17h</td><td><span class="ec-status ec-green">Ativo</span></td></tr>
+  <tr><td>#00418</td><td>Maria Clara</td><td>31</td><td>Mulher transgênero</td><td>Ter, 14h–17h</td><td><span class="ec-status ec-green">Ativo</span></td></tr>
+  <tr><td>#00501</td><td>Não informado</td><td>19</td><td>Prefiro não informar</td><td>Qui, 13h–15h</td><td><span class="ec-status ec-gray">Inativo</span></td></tr></table></section>
+  <div class="ec-modal" id="ecPatientModal"><div class="ec-modal-box"><div class="toolbar"><h2>Novo paciente</h2><button class="action secondary" id="ecPatientClose">Fechar</button></div>
+  <div class="formgrid">
+    <div class="field"><label>Número de inscrição *</label><input placeholder="Ex.: 00342"></div>
+    <div class="field"><label>Nome</label><input placeholder="Opcional"></div>
+    <div class="field"><label>Idade</label><input type="number" min="0"></div>
+    <div class="field"><label>Gênero</label><select><option>Mulher cisgênero</option><option>Homem cisgênero</option><option>Mulher transgênero</option><option>Homem transgênero</option><option>Pessoa não binária</option><option>Outra identidade</option><option>Prefiro não informar</option></select></div>
+  </div>
+  <div class="notice" style="margin-top:14px">Disponibilidade é opcional e será marcada em uma grade semanal.</div>
+  <div class="ec-actions"><button class="action secondary" id="ecPatientCancel">Cancelar</button><button class="action" id="ecPatientSave">Cadastrar paciente</button></div></div></div>`;
+  const m=document.getElementById('ecPatientModal');
+  document.getElementById('ecNewPatient').onclick=()=>m.style.display='flex';
+  document.getElementById('ecPatientClose').onclick=()=>m.style.display='none';
+  document.getElementById('ecPatientCancel').onclick=()=>m.style.display='none';
+  document.getElementById('ecPatientSave').onclick=()=>{alert('Protótipo validado.');m.style.display='none';};
+};
+
+const ecPrototypeReports = () => {
+  content.innerHTML=`
+  <section class="panel"><div class="toolbar"><div><h2>Relatórios</h2><div class="ec-muted">Relatórios gerais e individuais.</div></div><div><button class="action secondary">PDF</button> <button class="action">Excel</button></div></div>
+  <div class="ec-grid">
+    <div class="ec-card"><h3>120h</h3><div class="ec-muted">Horas previstas</div></div>
+    <div class="ec-card"><h3>84h</h3><div class="ec-muted">Horas realizadas</div></div>
+    <div class="ec-card"><h3>6</h3><div class="ec-muted">Pacientes atendidos</div></div>
+  </div>
+  <div class="panel" style="margin-top:16px;padding:0;border:0"><h3>Relatório por estagiário</h3>
+  <table><tr><th>Estagiário</th><th>Horas previstas</th><th>Realizadas</th><th>Pacientes</th><th>Presenças</th><th>Ausências</th><th></th></tr>
+  <tr><td>João Pedro</td><td>120h</td><td>84h</td><td>6</td><td>80</td><td>4</td><td><button class="action secondary">PDF</button> <button class="action secondary">Excel</button></td></tr>
+  <tr><td>Ana Beatriz</td><td>120h</td><td>76h</td><td>5</td><td>73</td><td>3</td><td><button class="action secondary">PDF</button> <button class="action secondary">Excel</button></td></tr></table></div></section>`;
+};
+
+const ecPrototypeSettings = () => {
+  content.innerHTML=`
+  <section class="panel"><div class="toolbar"><div><h2>Quadro de horários da clínica</h2><div class="ec-muted">A coordenação define quais intervalos ficam liberados.</div></div><button class="action">Salvar quadro</button></div>
+  <div class="notice">Clique para alternar entre <strong>🟢 Liberado</strong> e <strong>⚪ Fechado</strong>. Os estagiários só verão os horários liberados.</div>
+  <div class="ec-calendar">
+    <div class="ec-head">Horário</div><div class="ec-head">Seg</div><div class="ec-head">Ter</div><div class="ec-head">Qua</div><div class="ec-head">Qui</div><div class="ec-head">Sex</div><div class="ec-head">Sáb</div>
+    <div>08–09</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-open">🟢 Liberado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div>
+    <div>09–10</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-open">🟢 Liberado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div>
+    <div>10–11</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-open">🟢 Liberado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div>
+    <div>11–12</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-open">🟢 Liberado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div>
+    <div>13–14</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div>
+    <div>14–15</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div>
+    <div>15–16</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div>
+    <div>16–17</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div><div class="ec-open">🟢 Liberado</div>
+    <div>17–18</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div><div class="ec-closed">⚪ Fechado</div>
+  </div></section>`;
+};
+
+
 const coordinatorPages = {
   dashboard: `
     <div class="cards">
@@ -795,6 +929,12 @@ function buildNav(pages) {
 }
 
 function render() {
+  if (currentContext === 'coordenacao') {
+    if (currentPage === 'agenda') { ecPrototypeAgenda(); return; }
+    if (currentPage === 'pacientes') { ecPrototypePatients(); return; }
+    if (currentPage === 'relatorio' || currentPage === 'relatorios') { ecPrototypeReports(); return; }
+    if (currentPage === 'regras_horario' || currentPage === 'configuracoes') { ecPrototypeSettings(); return; }
+  }
   if (currentContext === 'coordenacao' && currentPage === 'agenda') {
     title.textContent = 'Agenda';
     nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
