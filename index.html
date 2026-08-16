@@ -34,32 +34,20 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px
 .ec-appt span{font-size:12px;margin-top:3px}.ec-appt small{font-size:11px;color:#667085;margin-top:2px}
 .ec-pills{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
 .ec-pill{padding:7px 10px;border-radius:999px;background:#f2f4f7;font-size:12px}
-.ec-pill.active{background:#e7f3ec;color:#176b36;font-weight:700}
 .ec-status{display:inline-block;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:700}
 .ec-green{background:#e7f3ec;color:#176b36}.ec-yellow{background:#fff4d6;color:#8a5b00}.ec-red{background:#fdecec;color:#a12b2b}.ec-gray{background:#eef0f2;color:#475467}
 .ec-modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;}
-.ec-modal-box{background:white;border-radius:16px;padding:24px;width:min(900px,100%);max-height:90vh;overflow:auto}
+.ec-modal-box{background:white;border-radius:16px;padding:24px;width:min(950px,100%);max-height:90vh;overflow:auto}
 .ec-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}
 @media(max-width:900px){.ec-grid{grid-template-columns:1fr}.ec-calendar{grid-template-columns:65px repeat(6,minmax(120px,1fr))}}
 
-.ec-toggle-slot{
-  width:100%;
-  min-height:48px;
-  font:inherit;
-  text-align:center;
-  cursor:pointer;
-  padding:10px;
-  border-radius:9px;
-  transition: 0.1s;
-}
+.ec-toggle-slot{width:100%;min-height:48px;font:inherit;text-align:center;cursor:pointer;padding:10px;border-radius:9px;transition:.1s}
 .ec-toggle-slot:hover{filter:brightness(.97);transform:translateY(-1px)}
-.ec-toggle-slot:active{transform:translateY(0)}
-
 button,.action,select,input{cursor:pointer}.ec-toggle-slot{pointer-events:auto!important}
 
-#loadingScreen { display: flex; flex-direction: column; gap: 12px; }
-.spinner { border: 3px solid #f3f3f3; border-top: 3px solid #315c8c; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto; }
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+#loadingScreen{display:flex;flex-direction:column;gap:12px}
+.spinner{border:3px solid #f3f3f3;border-top:3px solid #315c8c;border-radius:50%;width:30px;height:30px;animation:spin 1s linear infinite;margin:0 auto}
+@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -117,12 +105,8 @@ button,.action,select,input{cursor:pointer}.ec-toggle-slot{pointer-events:auto!i
 </div>
 
 <script>
-// =========================================================================
-// CHAVES DO SUPABASE
-// =========================================================================
 const SUPABASE_URL = 'https://bhgwzqkdhbgfrlhcveqg.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_l8XeXHqjK6yRwFHjquGadg_e0PpDNXn';
-// =========================================================================
 
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
@@ -171,6 +155,35 @@ function generateAvailabilityGrid(clinicSlots, userSlots) {
         }
      });
   });
+  return html;
+}
+
+// Visualizador de grade compacta (somente leitura) para prévia no modal
+function generateReadOnlyMiniGrid(clinicSlots, userSlots) {
+  const days = [{n:1, l:'Seg'},{n:2, l:'Ter'},{n:3, l:'Qua'},{n:4, l:'Qui'},{n:5, l:'Sex'},{n:6, l:'Sáb'}];
+  const enabledTimes = [...new Set((clinicSlots||[]).map(s => s.start_time.slice(0,5)))].sort();
+  if(enabledTimes.length === 0) return `<div class="ec-muted">Nenhum horário da clínica.</div>`;
+
+  let html = `<div class="ec-calendar" style="font-size:11px; transform:scale(0.98); transform-origin:top left;"><div class="ec-head" style="min-height:30px!important;padding:4px">Horário</div>` + days.map(d=>`<div class="ec-head" style="min-height:30px!important;padding:4px">${d.l}</div>`).join('');
+  
+  enabledTimes.forEach(time => {
+     const hourInt = parseInt(time.split(':')[0]);
+     const endHour = String(hourInt+1).padStart(2,'0') + ':00';
+     html += `<div style="padding:6px"><strong>${time.slice(0,2)}h</strong></div>`;
+     days.forEach(d => {
+        const cSlot = clinicSlots.find(s => s.weekday === d.n && s.start_time.slice(0,5) === time);
+        if(cSlot) {
+           const isSelected = userSlots.some(s => s.weekday === d.n && s.start_time.slice(0,5) === time);
+           const bg = isSelected ? '#e9f7ef' : '#f3f4f6';
+           const fg = isSelected ? '#176b36' : '#98a2b3';
+           const txt = isSelected ? '✓' : '·';
+           html += `<div style="background:${bg}; color:${fg}; display:flex; align-items:center; justify-content:center; font-weight:700; border-radius:6px; min-height:38px">${txt}</div>`;
+        } else {
+           html += `<div style="background:#f9fafb; color:#e5e7eb; display:flex; align-items:center; justify-content:center; border-radius:6px;">-</div>`;
+        }
+     });
+  });
+  html += `</div>`;
   return html;
 }
 
@@ -383,7 +396,71 @@ const ecPrototypePatients = async () => {
 };
 
 // -------------------------------------------------------------------------
-// PÁGINA: AGENDA & MOTOR DE AGENDAMENTO (FASE 5)
+// PÁGINA: GRADE GERAL CRUZADA DE ESTAGIÁRIOS
+// -------------------------------------------------------------------------
+const ecCrossedAvailabilityPage = async () => {
+  content.innerHTML = `
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <h2>Grade Geral de Disponibilidade dos Estagiários</h2>
+          <div class="ec-muted">Visualize os horários livres de todos os estagiários ativos cruzados com o quadro da clínica.</div>
+        </div>
+      </div>
+      <div id="crossedGridWrap" style="overflow:auto; margin-top:14px;">Carregando grade cruzada...</div>
+    </section>`;
+
+  const wrap = document.getElementById('crossedGridWrap');
+  const [{ data: clinicSlots }, { data: interns }, { data: allAvail }] = await Promise.all([
+    db.from('clinic_schedule_slots').select('*').eq('enabled', true),
+    db.from('interns').select('*').eq('status', 'ativo'),
+    db.from('intern_availability').select('*')
+  ]);
+
+  if(!clinicSlots || clinicSlots.length === 0) {
+    wrap.innerHTML = `<div class="notice">Nenhum horário liberado pela clínica. Verifique as Configurações.</div>`;
+    return;
+  }
+  if(!interns || interns.length === 0) {
+    wrap.innerHTML = `<div class="notice">Nenhum estagiário ativo cadastrado.</div>`;
+    return;
+  }
+
+  const days = [{n:1, l:'Segunda'},{n:2, l:'Terça'},{n:3, l:'Quarta'},{n:4, l:'Quinta'},{n:5, l:'Sexta'},{n:6, l:'Sábado'}];
+  const enabledTimes = [...new Set(clinicSlots.map(s => s.start_time.slice(0,5)))].sort();
+
+  let html = `<table style="min-width:800px"><thead><tr><th>Horário / Dia</th>` + days.map(d=>`<th>${d.l}</th>`).join('') + `</tr></thead><tbody>`;
+
+  enabledTimes.forEach(time => {
+    const hourInt = parseInt(time.split(':')[0]);
+    const endHour = String(hourInt+1).padStart(2,'0') + ':00';
+    html += `<tr><td><strong>${time} – ${endHour.split(':')[0]}h</strong></td>`;
+    days.forEach(d => {
+      const cSlot = clinicSlots.find(s => s.weekday === d.n && s.start_time.slice(0,5) === time);
+      if(!cSlot) {
+        html += `<td style="background:#f9fafb; color:#98a2b3; font-size:11px">Fechado clínica</td>`;
+      } else {
+        // Encontra quais estagiários marcaram disponibilidade neste dia e horário
+        const availableInterns = (allAvail || []).filter(a => a.weekday === d.n && a.start_time.slice(0,5) === time).map(a => {
+          const internObj = interns.find(i => i.id === a.intern_id);
+          return internObj ? internObj.full_name.split(' ')[0] : null;
+        }).filter(Boolean);
+
+        if(availableInterns.length > 0) {
+          html += `<td style="background:#e9f7ef;"><strong style="color:#176b36; font-size:12px">✓ ${availableInterns.length} estagiário(s):</strong><div style="font-size:11px; color:#475467">${availableInterns.join(', ')}</div></td>`;
+        } else {
+          html += `<td style="color:#98a2b3; font-size:11px">Nenhum disponível</td>`;
+        }
+      }
+    });
+    html += `</tr>`;
+  });
+  html += `</tbody></table>`;
+  wrap.innerHTML = html;
+};
+
+// -------------------------------------------------------------------------
+// PÁGINA: AGENDA & MOTOR DE AGENDAMENTO
 // -------------------------------------------------------------------------
 const ecPrototypeAgenda = async () => {
   content.innerHTML=`
@@ -398,7 +475,7 @@ const ecPrototypeAgenda = async () => {
     </div>
   </section>
 
-  <!-- MODAL DE NOVO AGENDAMENTO COM VALIDAÇÕES E PRÉVIA -->
+  <!-- MODAL DE NOVO AGENDAMENTO -->
   <div class="ec-modal" id="ecAppointmentModal"><div class="ec-modal-box">
     <div class="toolbar"><h2>Novo Agendamento Semanal</h2><button class="action secondary" id="ecClose">Fechar</button></div>
     <div id="modalNotice" class="message"></div>
@@ -418,7 +495,19 @@ const ecPrototypeAgenda = async () => {
       <div class="field"><label>Horário *</label><select id="apptTimeSlot"><option value="">Carregando horários...</option></select></div>
     </div>
 
-    <div class="preview-box" id="apptPreviewBox" style="margin-top:18px; padding:16px; background:#f4f7fb; border-radius:10px;">
+    <!-- PAINEL DE PRÉVIAS DE DISPONIBILIDADE DO PACIENTE E ESTAGIÁRIO -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px;">
+      <div style="background:#f8fafc; padding:12px; border-radius:10px; border:1px solid #e2e8f0;">
+        <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:#315c8c;">Disponibilidade do Paciente</div>
+        <div id="patientMiniPreview" class="ec-muted">Selecione um paciente para ver a grade.</div>
+      </div>
+      <div style="background:#f8fafc; padding:12px; border-radius:10px; border:1px solid #e2e8f0;">
+        <div style="font-size:12px; font-weight:700; margin-bottom:6px; color:#315c8c;">Disponibilidade do Estagiário</div>
+        <div id="internMiniPreview" class="ec-muted">Selecione um estagiário para ver a grade.</div>
+      </div>
+    </div>
+
+    <div class="preview-box" id="apptPreviewBox" style="margin-top:16px; padding:14px; background:#f4f7fb; border-radius:10px;">
       <strong>Prévia das Datas:</strong>
       <p id="apptPreviewText" style="margin:6px 0 0; color:#667085;">Preencha os campos acima para calcular a prévia de atendimentos.</p>
     </div>
@@ -434,15 +523,20 @@ const ecPrototypeAgenda = async () => {
   const previewText = document.getElementById('apptPreviewText');
   const confirmBtn = document.getElementById('ecConfirm');
   const modalNotice = document.getElementById('modalNotice');
+  const patientMini = document.getElementById('patientMiniPreview');
+  const internMini = document.getElementById('internMiniPreview');
 
-  // Carrega lista de atendimentos reais
+  let clinicSlotsCache = [];
+  let allPatientsCache = [];
+  let allInternsCache = [];
+
   const loadAppointments = async () => {
     const { data, error } = await db.from('appointments')
       .select('id, appointment_date, start_time, end_time, status, intern_confirmation, patient_confirmation, attendance_status, patients(registration_number, full_name), interns(full_name)')
       .order('appointment_date', { ascending: true });
 
-    if(error) { wrap.innerHTML = `<div class="message error" style="display:block">Erro ao carregar agenda: ${error.message}</div>`; return; }
-    if(!data || data.length === 0) { wrap.innerHTML = `<div class="notice">Nenhum atendimento gerado no momento. Clique em "+ Novo agendamento" para começar.</div>`; return; }
+    if(error) { wrap.innerHTML = `<div class="message error" style="display:block">Erro: ${error.message}</div>`; return; }
+    if(!data || data.length === 0) { wrap.innerHTML = `<div class="notice">Nenhum atendimento agendado no momento. Clique em "+ Novo agendamento" para começar.</div>`; return; }
 
     const rows = data.map(a => {
       const pat = a.patients ? `#${a.patients.registration_number} (${a.patients.full_name || 'Sem nome'})` : '—';
@@ -470,26 +564,30 @@ const ecPrototypeAgenda = async () => {
 
   await loadAppointments();
 
-  // Abrir modal e preencher selects
   document.getElementById('ecNewAppointment').onclick = async () => {
     modalNotice.style.display = 'none';
     confirmBtn.disabled = true;
     previewText.textContent = 'Preencha os campos para calcular a prévia.';
+    patientMini.innerHTML = '<span class="ec-muted">Selecione um paciente...</span>';
+    internMini.innerHTML = '<span class="ec-muted">Selecione um estagiário...</span>';
 
-    const [{ data: pats }, constInterns, constSlots] = await Promise.all([
+    const [{ data: pats }, { data: interns }, { data: slots }] = await Promise.all([
       db.from('patients').select('id, registration_number, full_name').eq('status', 'ativo'),
       db.from('interns').select('id, full_name').eq('status', 'ativo'),
       db.from('clinic_schedule_slots').select('*').eq('enabled', true)
     ]);
 
-    document.getElementById('apptPatient').innerHTML = '<option value="">Selecione...</option>' + (pats||[]).map(p=>`<option value="${p.id}">#${p.registration_number} — ${p.full_name||'Sem nome'}</option>`).join('');
-    document.getElementById('apptIntern').innerHTML = '<option value="">Selecione...</option>' + (constInterns.data||[]).map(i=>`<option value="${i.id}">${i.full_name}</option>`).join('');
+    allPatientsCache = pats || [];
+    allInternsCache = interns || [];
+    clinicSlotsCache = slots || [];
+
+    document.getElementById('apptPatient').innerHTML = '<option value="">Selecione...</option>' + allPatientsCache.map(p=>`<option value="${p.id}">#${p.registration_number} — ${p.full_name||'Sem nome'}</option>`).join('');
+    document.getElementById('apptIntern').innerHTML = '<option value="">Selecione...</option>' + allInternsCache.map(i=>`<option value="${i.id}">${i.full_name}</option>`).join('');
     
-    // Atualiza horários do select baseado no dia da semana escolhido
     const updateTimeSlots = () => {
       const wd = parseInt(document.getElementById('apptWeekday').value);
-      const slots = (constSlots.data||[]).filter(s => s.weekday === wd);
-      document.getElementById('apptTimeSlot').innerHTML = '<option value="">Selecione o horário...</option>' + slots.map(s=>`<option value="${s.start_time}|${s.end_time}">${s.start_time.slice(0,5)} – ${s.end_time.slice(0,5)}</option>`).join('');
+      const filtered = clinicSlotsCache.filter(s => s.weekday === wd);
+      document.getElementById('apptTimeSlot').innerHTML = '<option value="">Selecione o horário...</option>' + filtered.map(s=>`<option value="${s.start_time}|${s.end_time}">${s.start_time.slice(0,5)} – ${s.end_time.slice(0,5)}</option>`).join('');
     };
 
     document.getElementById('apptWeekday').onchange = updateTimeSlots;
@@ -498,10 +596,35 @@ const ecPrototypeAgenda = async () => {
     modal.style.display = 'flex';
   };
 
+  // Exibir mini grade do paciente ao selecionar
+  document.getElementById('apptPatient').onchange = async () => {
+    const patId = document.getElementById('apptPatient').value;
+    if(!patId) { patientMini.innerHTML = '<span class="ec-muted">Nenhum paciente selecionado.</span>'; calculatePreview(); return; }
+    const { data: pAvail } = await db.from('patient_availability').select('*').eq('patient_id', patId);
+    if(!pAvail || pAvail.length === 0) {
+      patientMini.innerHTML = `<span class="ec-muted">Paciente sem grade específica (aceita qualquer horário da clínica).</span>`;
+    } else {
+      patientMini.innerHTML = generateReadOnlyMiniGrid(clinicSlotsCache, pAvail);
+    }
+    calculatePreview();
+  };
+
+  // Exibir mini grade do estagiário ao selecionar
+  document.getElementById('apptIntern').onchange = async () => {
+    const internId = document.getElementById('apptIntern').value;
+    if(!internId) { internMini.innerHTML = '<span class="ec-muted">Nenhum estagiário selecionado.</span>'; calculatePreview(); return; }
+    const { data: iAvail } = await db.from('intern_availability').select('*').eq('intern_id', internId);
+    if(!iAvail || iAvail.length === 0) {
+      internMini.innerHTML = `<span class="ec-muted" style="color:#b42318">Estagiário não cadastrou nenhuma disponibilidade.</span>`;
+    } else {
+      internMini.innerHTML = generateReadOnlyMiniGrid(clinicSlotsCache, iAvail);
+    }
+    calculatePreview();
+  };
+
   document.getElementById('ecClose').onclick = () => modal.style.display = 'none';
   document.getElementById('ecCancel').onclick = () => modal.style.display = 'none';
 
-  // MOTOR DE CÁLCULO DE PRÉVIA E VALIDAÇÕES (As 4 Regras Obrigatórias)
   const calculatePreview = async () => {
     modalNotice.style.display = 'none';
     confirmBtn.disabled = true;
@@ -528,17 +651,15 @@ const ecPrototypeAgenda = async () => {
       return;
     }
 
-    // Regra 1: Verificar se o horário está liberado pela clínica
-    const { data: clinicCheck } = await db.from('clinic_schedule_slots')
-      .select('id').eq('weekday', weekday).eq('start_time', startTime).eq('end_time', endTime).eq('enabled', true).maybeSingle();
-
+    // Regra 1: Horário liberado pela clínica
+    const clinicCheck = clinicSlotsCache.some(s => s.weekday === weekday && s.start_time.slice(0,5) === startTime.slice(0,5));
     if(!clinicCheck) {
       modalNotice.textContent = 'Conflito: Este horário está fechado no Quadro de Horários da clínica.';
       modalNotice.className = 'message error'; modalNotice.style.display = 'block';
       return;
     }
 
-    // Regra 2: Verificar se o estagiário tem disponibilidade cadastrada
+    // Regra 2: Disponibilidade do estagiário
     const { data: internCheck } = await db.from('intern_availability')
       .select('id').eq('intern_id', internId).eq('weekday', weekday).eq('start_time', startTime).maybeSingle();
 
@@ -548,23 +669,19 @@ const ecPrototypeAgenda = async () => {
       return;
     }
 
-    // Regra 3: Verificar se o paciente tem disponibilidade (caso tenha preenchido grade)
-    const { data: patAvail } = await db.from('patient_availability').select('id').eq('patient_id', patientId);
+    // Regra 3: Disponibilidade do paciente (apenas se ele preencheu grade)
+    const { data: patAvail } = await db.from('patient_availability').select('id, weekday, start_time').eq('patient_id', patientId);
     if(patAvail && patAvail.length > 0) {
       const patCheck = patAvail.some(p => p.weekday === weekday && p.start_time.slice(0,5) === startTime.slice(0,5));
       if(!patCheck) {
-        modalNotice.textContent = 'Conflito: O paciente possui grade de disponibilidade cadastrada, mas este horário não foi marcado por ele.';
+        modalNotice.textContent = 'Conflito: O paciente possui grade cadastrada, mas não marcou disponibilidade neste horário.';
         modalNotice.className = 'message error'; modalNotice.style.display = 'block';
         return;
       }
     }
 
-    // Calcula todas as datas semanais entre o início e o fim que caem no dia da semana correto
     let curr = new Date(start);
-    // Ajusta para o primeiro dia da semana correspondente
-    while(curr.getDay() !== (weekday % 7)) {
-      curr.setDate(curr.getDate() + 1);
-    }
+    while(curr.getDay() !== (weekday % 7)) curr.setDate(curr.getDate() + 1);
 
     const generatedDates = [];
     while(curr <= end) {
@@ -573,11 +690,11 @@ const ecPrototypeAgenda = async () => {
     }
 
     if(generatedDates.length === 0) {
-      previewText.textContent = 'Nenhuma data encontrada para este dia da semana no período informado.';
+      previewText.textContent = 'Nenhuma data encontrada para este dia da semana no período.';
       return;
     }
 
-    // Regra 4: Checar choques de horário existentes (choque de agenda do estagiário ou paciente)
+    // Regra 4: Choque de horários
     const dateStrings = generatedDates.map(d => d.toISOString().split('T')[0]);
     const { data: conflicts } = await db.from('appointments')
       .select('appointment_date, intern_id, patient_id')
@@ -588,26 +705,22 @@ const ecPrototypeAgenda = async () => {
     if(conflicts && conflicts.length > 0) {
       const hasConflict = conflicts.some(c => c.intern_id === internId || c.patient_id === patientId);
       if(hasConflict) {
-        modalNotice.textContent = 'Conflito de agenda: O estagiário ou o paciente já possuem outro atendimento marcado em algumas destas datas e horários.';
+        modalNotice.textContent = 'Conflito de agenda: O estagiário ou o paciente já possuem atendimento nestas datas/horários.';
         modalNotice.className = 'message error'; modalNotice.style.display = 'block';
         return;
       }
     }
 
-    // Se passou em todas as validações, exibe a prévia com sucesso
     previewText.innerHTML = `Serão gerados <strong>${generatedDates.length} atendimentos semanais</strong> (das <strong>${startTime.slice(0,5)} às ${endTime.slice(0,5)}</strong>).<br><small>Primeira sessão: ${generatedDates[0].toLocaleDateString('pt-BR')} | Última sessão: ${generatedDates[generatedDates.length-1].toLocaleDateString('pt-BR')}</small>`;
     confirmBtn.disabled = false;
   };
 
-  // Dispara o cálculo da prévia ao alterar qualquer campo do formulário
-  ['apptPatient', 'apptIntern', 'apptStartDate', 'apptEndDate', 'apptWeekday', 'apptTimeSlot'].forEach(id => {
+  ['apptStartDate', 'apptEndDate', 'apptWeekday', 'apptTimeSlot'].forEach(id => {
     document.getElementById(id).onchange = calculatePreview;
   });
 
-  // Gravar no banco ao confirmar
   confirmBtn.onclick = async () => {
     confirmBtn.disabled = true; confirmBtn.textContent = 'Gerando...';
-    
     const patientId = document.getElementById('apptPatient').value;
     const internId = document.getElementById('apptIntern').value;
     const startDateStr = document.getElementById('apptStartDate').value;
@@ -623,32 +736,92 @@ const ecPrototypeAgenda = async () => {
     const newAppts = [];
     while(curr <= end) {
       newAppts.push({
-        patient_id: patientId,
-        intern_id: internId,
+        patient_id: patientId, intern_id: internId,
         appointment_date: curr.toISOString().split('T')[0],
-        start_time: startTime,
-        end_time: endTime,
-        status: 'agendado',
-        intern_confirmation: 'aguardando',
-        patient_confirmation: 'aguardando',
-        attendance_status: 'pendente'
+        start_time: startTime, end_time: endTime,
+        status: 'agendado', intern_confirmation: 'aguardando',
+        patient_confirmation: 'aguardando', attendance_status: 'pendente'
       });
       curr.setDate(curr.getDate() + 7);
     }
 
     const { error } = await db.from('appointments').insert(newAppts);
-    if(error) {
-      alert('Erro ao criar atendimentos: ' + error.message);
-    } else {
-      modal.style.display = 'none';
-      await loadAppointments();
-    }
+    if(error) alert('Erro ao criar: ' + error.message);
+    else { modal.style.display = 'none'; await loadAppointments(); }
     confirmBtn.disabled = false; confirmBtn.textContent = 'Validar e Criar Atendimentos';
   };
 };
 
 const ecPrototypeReports = () => {
   content.innerHTML=`<section class="panel"><h2>Relatórios</h2><p class="subtle">Módulo de relatórios e exportação PDF/Excel (Fase 7).</p></section>`;
+};
+
+// Configurações (Quadro de Horários)
+const ecPrototypeSettings = async () => {
+  content.innerHTML=`
+  <section class="panel"><div class="toolbar"><div><h2>Quadro de horários da clínica</h2><div class="ec-muted">A coordenação define quais intervalos ficam liberados.</div></div><button class="action" id="ecSaveSchedule">Salvar quadro</button></div>
+  <div id="scheduleMsg" class="message"></div>
+  <div class="notice">Clique para alternar entre <strong>🟢 Liberado</strong> e <strong>⚪ Fechado</strong>.</div>
+  <div class="ec-calendar" id="scheduleGrid">
+    <div style="grid-column: 1/-1; padding: 20px; text-align: center;">Carregando horários do Supabase...</div>
+  </div></section>`;
+
+  const grid = document.getElementById('scheduleGrid');
+  const msg = document.getElementById('scheduleMsg');
+
+  const {data: slots, error} = await db.from('clinic_schedule_slots').select('*');
+  if(error) { grid.innerHTML = `<div style="grid-column: 1/-1; padding: 20px; text-align: center; color: red;">Erro: ${error.message}</div>`; return; }
+
+  const days = [{n:1, l:'Segunda'},{n:2, l:'Terça'},{n:3, l:'Quarta'},{n:4, l:'Quinta'},{n:5, l:'Sexta'},{n:6, l:'Sábado'}];
+  const uniqueTimes = [...new Set((slots||[]).map(s => s.start_time.slice(0,5)))].sort();
+  
+  if(uniqueTimes.length === 0) {
+      grid.innerHTML = `<div style="grid-column: 1/-1; padding: 20px; text-align: center;">Nenhum horário gerado no banco.</div>`;
+      return;
+  }
+
+  let html = `<div class="ec-head">Horário</div>` + days.map(d=>`<div class="ec-head">${d.l}</div>`).join('');
+  
+  uniqueTimes.forEach(time => {
+     const hourInt = parseInt(time.split(':')[0]);
+     const endHour = String(hourInt+1).padStart(2,'0') + ':00';
+     html += `<div><strong>${time.split(':')[0]}h – ${endHour.split(':')[0]}h</strong></div>`;
+     days.forEach(d => {
+        const slot = slots.find(s => s.weekday === d.n && s.start_time.slice(0,5) === time);
+        if(slot) {
+           const cssClass = slot.enabled ? 'ec-open' : 'ec-closed';
+           const text = slot.enabled ? '🟢 Liberado' : '⚪ Fechado';
+           html += `<button type="button" class="${cssClass} ec-toggle-slot" data-id="${slot.id}" data-weekday="${slot.weekday}" data-start="${slot.start_time}" data-end="${slot.end_time}">${text}</button>`;
+        } else {
+           html += `<div></div>`;
+        }
+     });
+  });
+  grid.innerHTML = html;
+
+  document.getElementById('ecSaveSchedule').onclick = async () => {
+     const btn = document.getElementById('ecSaveSchedule');
+     btn.disabled = true; btn.textContent = 'Salvando...';
+     msg.style.display = 'none';
+
+     const updates = Array.from(document.querySelectorAll('#scheduleGrid .ec-toggle-slot')).map(b => ({
+         id: b.dataset.id,
+         weekday: parseInt(b.dataset.weekday),
+         start_time: b.dataset.start,
+         end_time: b.dataset.end,
+         enabled: b.classList.contains('ec-open')
+     }));
+
+     const {error} = await db.from('clinic_schedule_slots').upsert(updates);
+     if(error) { 
+         msg.textContent = 'Erro ao salvar o quadro: ' + error.message; 
+         msg.className = 'message error'; msg.style.display = 'block';
+     } else {
+         msg.textContent = 'Quadro de horários atualizado com sucesso!';
+         msg.className = 'message success'; msg.style.display = 'block';
+     }
+     btn.disabled = false; btn.textContent = 'Salvar quadro';
+  };
 };
 
 const coordinatorPages = {
@@ -685,7 +858,7 @@ const internPages = {
     </section>
   `,
   meus: `
-    <section class="panel"><div class="toolbar"><div><h2>Meus agendamentos</h2><div class="subtle">Confirme os atendimentos com antecedência e registre presença ou ausência.</div></div></div>
+    <section class="panel"><div class="toolbar"><div><h2>Meus agendamentos</h2><div class="subtle">Confirme os atendimentos com antecedência.</div></div></div>
       <table><tr><th>Data</th><th>Horário</th><th>Paciente</th><th>Confirmação</th><th>Presença</th></tr>
       <tr><td>Hoje</td><td>14:00–15:00</td><td>#00342</td><td><button class="action secondary confirmMock">Confirmar</button></td><td>—</td></tr>
       </table>
@@ -731,14 +904,14 @@ async function loadProfile(user) {
 
 function updateContextNavigation() {
   const pages = currentContext === 'coordenacao' 
-    ? ['dashboard', 'agenda', 'estagiarios', 'pacientes', 'relatorio', 'regras_horario'] 
+    ? ['dashboard', 'agenda', 'grade_geral', 'estagiarios', 'pacientes', 'relatorio', 'regras_horario'] 
     : ['dashboard', 'meus', 'disponibilidade'];
   buildNav(pages);
 }
 
 function buildNav(pages) {
   const labels = {
-    dashboard:'Dashboard', agenda:'Agenda', estagiarios:'Estagiários',
+    dashboard:'Dashboard', agenda:'Agenda', grade_geral:'Grade Geral', estagiarios:'Estagiários',
     pacientes:'Pacientes', relatorio:'Relatórios', regras_horario:'Configurações',
     disponibilidade:'Minha disponibilidade', meus:'Meus agendamentos'
   };
@@ -751,6 +924,7 @@ function buildNav(pages) {
 function render() {
   if (currentContext === 'coordenacao') {
     if (currentPage === 'agenda') { ecPrototypeAgenda(); return; }
+    if (currentPage === 'grade_geral') { ecCrossedAvailabilityPage(); return; }
     if (currentPage === 'pacientes') { ecPrototypePatients(); return; }
     if (currentPage === 'relatorio' || currentPage === 'relatorios') { ecPrototypeReports(); return; }
     if (currentPage === 'regras_horario' || currentPage === 'configuracoes') { ecPrototypeSettings(); return; }
@@ -762,10 +936,10 @@ function render() {
   const pages = currentContext === 'coordenacao' ? coordinatorPages : internPages;
   content.innerHTML = pages[currentPage] || pages.dashboard;
   title.textContent = ({
-    dashboard:'Dashboard',agenda:'Agenda',estagiarios:'Estagiários',
-    pacientes:'Pacientes',relatorio:'Relatórios',
+    dashboard:'Dashboard', agenda:'Agenda', grade_geral:'Grade Geral de Disponibilidade', estagiarios:'Estagiários',
+    pacientes:'Pacientes', relatorio:'Relatórios',
     disponibilidade:'Minha disponibilidade',
-    regras_horario:'Configurações',meus:'Meus agendamentos'
+    regras_horario:'Configurações', meus:'Meus agendamentos'
   })[currentPage] || 'Dashboard';
   nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
   bindSimplePageActions();
@@ -783,7 +957,7 @@ loginForm.addEventListener('submit', async (event) => {
   const email = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value;
   const { data, error } = await db.auth.signInWithPassword({ email, password });
-  if (error) { showMessage('Não foi possível entrar. Confira o e-mail e a senha.'); loginButton.disabled = false; loginButton.textContent = 'Entrar'; return; }
+  if (error) { showMessage('Erro ao entrar. Confira e-mail e senha.'); loginButton.disabled = false; loginButton.textContent = 'Entrar'; return; }
   try { await loadProfile(data.user); } 
   catch (e) { await db.auth.signOut(); showMessage(e.message || 'Erro ao carregar perfil.'); }
   loginButton.disabled = false; loginButton.textContent = 'Entrar';
