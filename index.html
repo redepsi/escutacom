@@ -242,42 +242,40 @@ const registrationRequestsPage = async () => {
 
 const availabilityPage = async () => {
   const isIntern = currentContext === 'estagiario';
-  const internId = currentProfile?.intern_id;
+  const internId = currentIntern?.id;
+
+  if (isIntern && !internId) {
+    content.innerHTML = `<section class="panel"><div class="message error" style="display:block">Seu perfil de estagiário ainda não está vinculado a um cadastro de estagiário.</div></section>`;
+    return;
+  }
 
   content.innerHTML = `
     <section class="panel">
       <div class="toolbar">
         <div>
           <h2>${isIntern ? 'Minha disponibilidade' : 'Disponibilidade dos estagiários'}</h2>
-          <div class="subtle">${isIntern ? 'Marque os horários em que você pode atender. Horários bloqueados pela coordenação não podem ser selecionados.' : 'Consulte a disponibilidade semanal cadastrada.'}</div>
+          <div class="subtle">${isIntern ? 'Marque os horários em que você pode atender. A coordenação controla quais horários estão liberados.' : 'Visualize a disponibilidade semanal cadastrada pelos estagiários.'}</div>
         </div>
         ${isIntern ? '<div class="right"><button id="saveAvailabilityBtn" class="action">Salvar disponibilidade</button></div>' : ''}
       </div>
       <div id="availabilityMessage" class="message"></div>
-      <div class="notice">Janela atual de atendimento: <strong id="availabilityWindow">13:00–17:00</strong>. Cada intervalo tem 1 hora, sendo 50 minutos de atendimento + 10 minutos de folga.</div>
-      <div id="availabilityLoading" class="notice">Carregando calendário...</div>
+      <div id="availabilityLoading" class="notice">Carregando quadro de horários...</div>
       <div id="availabilityGrid"></div>
     </section>`;
 
   const loading = document.getElementById('availabilityLoading');
   const grid = document.getElementById('availabilityGrid');
 
-  const { data: settings, error: settingsError } = await db
-    .from('schedule_settings')
-    .select('start_time,end_time')
-    .eq('id', 1)
-    .maybeSingle();
+  const { data: clinicSlots, error: clinicError } = await db
+    .from('clinic_schedule_slots')
+    .select('weekday,start_time,end_time,enabled')
+    .order('weekday').order('start_time');
 
-  if (settingsError) {
+  if (clinicError) {
     loading.className='message error'; loading.style.display='block';
-    loading.textContent='Não foi possível carregar as regras de horário: '+settingsError.message;
+    loading.textContent='Não foi possível carregar o quadro de horários: '+clinicError.message;
     return;
   }
-
-  const start = settings?.start_time || '13:00:00';
-  const end = settings?.end_time || '17:00:00';
-  document.getElementById('availabilityWindow').textContent =
-    `${start.slice(0,5)}–${end.slice(0,5)}`;
 
   const { data: blocks, error: blocksError } = await db
     .from('schedule_blocks')
@@ -291,7 +289,7 @@ const availabilityPage = async () => {
   }
 
   let availability = [];
-  if (isIntern && internId) {
+  if (isIntern) {
     const { data, error } = await db
       .from('intern_availability')
       .select('weekday,start_time,end_time')
@@ -312,21 +310,14 @@ const availabilityPage = async () => {
     {n:3,l:'Quarta-feira'}, {n:4,l:'Quinta-feira'}, {n:5,l:'Sexta-feira'}
   ];
 
-  const toMin = t => {
-    const p=t.split(':').map(Number);
-    return p[0]*60+p[1];
-  };
-  const fmt = m => String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
-
-  const slots=[];
-  for(let m=toMin(start); m<toMin(end); m+=60) {
-    if(m+60<=toMin(end)) slots.push({start:fmt(m),end:fmt(m+60)});
-  }
+  const clinicSlotFor = (d,s,e) => (clinicSlots||[]).find(x =>
+    Number(x.weekday)===d && x.start_time.slice(0,5)===s && x.end_time.slice(0,5)===e
+  );
 
   const blockedFor = (d,s,e) => (blocks||[]).find(b =>
     Number(b.weekday)===d &&
-    toMin(b.start_time)<=toMin(s) &&
-    toMin(b.end_time)>=toMin(e)
+    b.start_time.slice(0,5) <= s &&
+    b.end_time.slice(0,5) >= e
   );
 
   const availableFor = (d,s,e) => availability.some(a =>
@@ -335,18 +326,27 @@ const availabilityPage = async () => {
     a.end_time.slice(0,5)===e
   );
 
+  const allSlots = [...new Map(
+    (clinicSlots||[]).map(x => [`${x.start_time.slice(0,5)}-${x.end_time.slice(0,5)}`, {
+      start:x.start_time.slice(0,5), end:x.end_time.slice(0,5)
+    }])
+  ).values()].sort((a,b)=>a.start.localeCompare(b.start));
+
   let table='<div style="overflow:auto"><table class="availability-table"><tr><th>Horário</th>';
   days.forEach(d=>table+=`<th>${d.l}</th>`);
   table+='</tr>';
 
-  slots.forEach(slot=>{
+  allSlots.forEach(slot=>{
     table+=`<tr><td><strong>${slot.start}–${slot.end}</strong></td>`;
     days.forEach(d=>{
+      const clinic=clinicSlotFor(d.n,slot.start,slot.end);
       const block=blockedFor(d.n,slot.start,slot.end);
       const checked=availableFor(d.n,slot.start,slot.end);
 
-      if(block) {
-        table+=`<td><div class="slot blocked">🔒 Bloqueado${block.reason?' · '+escapeHtml(block.reason):''}</div></td>`;
+      if(!clinic?.enabled) {
+        table+=`<td><div class="slot outside">—</div></td>`;
+      } else if(block) {
+        table+=`<td><div class="slot blocked">🔒 Bloqueado</div></td>`;
       } else if(isIntern) {
         table+=`<td><label class="slot selectable ${checked?'selected':''}">
           <input type="checkbox" class="availability-check" data-day="${d.n}" data-start="${slot.start}" data-end="${slot.end}" ${checked?'checked':''}>
@@ -409,46 +409,111 @@ const availabilitySettingsPage = async () => {
   content.innerHTML=`
     <section class="panel">
       <div class="toolbar">
-        <div><h2>Regras de horário da agenda</h2>
-        <div class="subtle">Defina a janela geral em que a clínica pode receber atendimentos.</div></div>
+        <div>
+          <h2>Quadro de horários da clínica</h2>
+          <div class="subtle">Você define, por dia, quais intervalos de 1 hora ficam liberados para atendimento.</div>
+        </div>
+        <button id="saveClinicSchedule" class="action">Salvar quadro</button>
       </div>
-      <div class="notice"><strong>Regra deste semestre:</strong> 13h às 17h. Fora dessa janela, o estagiário nem sequer verá opções de disponibilidade.</div>
-      <div class="formgrid">
-        <div class="field"><label>Início</label><input id="scheduleStart" type="time"></div>
-        <div class="field"><label>Fim</label><input id="scheduleEnd" type="time"></div>
+      <div class="notice">
+        Cada intervalo representa <strong>50 minutos de atendimento + 10 minutos de folga</strong>.
+        Horários desligados não aparecem como opção para os estagiários.
       </div>
-      <div style="margin-top:14px"><button id="saveScheduleSettings" class="action">Salvar regra</button></div>
-      <div id="settingsMessage" class="message"></div>
+      <div id="clinicScheduleMessage" class="message"></div>
+      <div id="clinicScheduleLoading" class="notice">Carregando quadro...</div>
+      <div id="clinicScheduleGrid"></div>
     </section>
 
     <section class="panel">
-      <div class="toolbar"><div><h2>Bloqueios</h2><div class="subtle">Bloqueie intervalos específicos dentro da janela geral.</div></div>
+      <div class="toolbar">
+        <div>
+          <h2>Bloqueios específicos</h2>
+          <div class="subtle">Use quando um intervalo normalmente liberado precisar ficar indisponível.</div>
+        </div>
         <button id="newBlock" class="action">+ Bloquear horário</button>
       </div>
       <div id="blocksList">Carregando...</div>
     </section>`;
 
-  const {data:settings}=await db.from('schedule_settings').select('start_time,end_time').eq('id',1).maybeSingle();
-  document.getElementById('scheduleStart').value=(settings?.start_time||'13:00:00').slice(0,5);
-  document.getElementById('scheduleEnd').value=(settings?.end_time||'17:00:00').slice(0,5);
+  const loading=document.getElementById('clinicScheduleLoading');
+  const grid=document.getElementById('clinicScheduleGrid');
 
-  document.getElementById('saveScheduleSettings').onclick=async()=>{
-    const msg=document.getElementById('settingsMessage');
-    const start=document.getElementById('scheduleStart').value;
-    const end=document.getElementById('scheduleEnd').value;
+  const {data:slots,error}=await db.from('clinic_schedule_slots')
+    .select('id,weekday,start_time,end_time,enabled')
+    .order('weekday').order('start_time');
 
-    if(!start || !end || start>=end){
-      msg.textContent='Informe horários válidos.';
-      msg.className='message error'; msg.style.display='block'; return;
+  if(error){
+    loading.className='message error'; loading.style.display='block';
+    loading.textContent='Não foi possível carregar o quadro: '+error.message;
+    return;
+  }
+
+  loading.remove();
+
+  const days=[
+    {n:1,l:'Segunda-feira'},{n:2,l:'Terça-feira'},
+    {n:3,l:'Quarta-feira'},{n:4,l:'Quinta-feira'},{n:5,l:'Sexta-feira'}
+  ];
+
+  const uniqueSlots=[...new Map((slots||[]).map(s=>[
+    `${s.start_time.slice(0,5)}-${s.end_time.slice(0,5)}`,
+    {start:s.start_time.slice(0,5),end:s.end_time.slice(0,5)}
+  ])).values()].sort((a,b)=>a.start.localeCompare(b.start));
+
+  let table='<div style="overflow:auto"><table class="availability-table"><tr><th>Horário</th>';
+  days.forEach(d=>table+=`<th>${d.l}</th>`);
+  table+='</tr>';
+
+  uniqueSlots.forEach(slot=>{
+    table+=`<tr><td><strong>${slot.start}–${slot.end}</strong></td>`;
+    days.forEach(d=>{
+      const found=(slots||[]).find(s=>Number(s.weekday)===d.n && s.start_time.slice(0,5)===slot.start && s.end_time.slice(0,5)===slot.end);
+      const enabled=!!found?.enabled;
+      table+=`<td><label class="slot selectable clinic-slot ${enabled?'selected':''}">
+        <input type="checkbox" data-slot-id="${found?.id||''}" data-day="${d.n}" data-start="${slot.start}" data-end="${slot.end}" ${enabled?'checked':''}>
+        <span>${enabled?'🟢 Liberado':'⚪ Fechado'}</span>
+      </label></td>`;
+    });
+    table+='</tr>';
+  });
+
+  table+='</table></div>';
+  grid.innerHTML=table;
+
+  document.querySelectorAll('.clinic-slot input').forEach(cb=>{
+    cb.addEventListener('change',()=>{
+      cb.closest('.slot').classList.toggle('selected',cb.checked);
+      cb.closest('.slot').querySelector('span').textContent=cb.checked?'🟢 Liberado':'⚪ Fechado';
+    });
+  });
+
+  document.getElementById('saveClinicSchedule').onclick=async()=>{
+    const btn=document.getElementById('saveClinicSchedule');
+    const msg=document.getElementById('clinicScheduleMessage');
+    btn.disabled=true;
+
+    const updates=[...document.querySelectorAll('.clinic-slot input')].map(cb=>({
+      id:cb.dataset.slotId,
+      enabled:cb.checked
+    }));
+
+    for(const item of updates){
+      const {error}=await db.from('clinic_schedule_slots').update({
+        enabled:item.enabled,
+        updated_by:currentProfile.id,
+        updated_at:new Date().toISOString()
+      }).eq('id',item.id);
+
+      if(error){
+        msg.textContent='Não foi possível salvar o quadro: '+error.message;
+        msg.className='message error'; msg.style.display='block';
+        btn.disabled=false; return;
+      }
     }
 
-    const {error}=await db.from('schedule_settings').upsert({
-      id:1,start_time:start+':00',end_time:end+':00',
-      updated_by:currentProfile.id,updated_at:new Date().toISOString()
-    });
-
-    msg.textContent=error?'Erro: '+error.message:'Regra de horário salva.';
-    msg.className=error?'message error':'message success'; msg.style.display='block';
+    msg.textContent='Quadro de horários salvo com sucesso.';
+    msg.className='message success'; msg.style.display='block';
+    btn.disabled=false;
   };
 
   const loadBlocks=async()=>{
@@ -489,10 +554,15 @@ const availabilitySettingsPage = async () => {
     const end=prompt('Horário final (ex.: 14:00)','14:00');
     if(end===null)return;
     const reason=prompt('Motivo do bloqueio (opcional)','');
+
     const {error}=await db.from('schedule_blocks').insert({
-      weekday:Number(day),start_time:start+':00',end_time:end+':00',
-      reason:reason||null,created_by:currentProfile.id
+      weekday:Number(day),
+      start_time:start+':00',
+      end_time:end+':00',
+      reason:reason||null,
+      created_by:currentProfile.id
     });
+
     if(error)alert('Não foi possível criar o bloqueio: '+error.message);
     else loadBlocks();
   };
@@ -543,7 +613,9 @@ const coordinatorPages = {
   `,
   solicitacoes: `
     <section class="panel"><h2>Solicitações de cadastro</h2><div class="notice">Aqui aparecerão os estagiários que solicitaram cadastro e aguardam autorização.</div></section>
-  `
+  `,
+  disponibilidade: `<section class="panel"><h2>Disponibilidade</h2></section>`,
+  regras_horario: `<section class="panel"><h2>Quadro de horários da clínica</h2></section>`
 };
 
 const internPages = {
@@ -608,8 +680,8 @@ function buildNav(pages) {
   const labels = {
     dashboard:'Dashboard',agenda:'Agenda',estagiarios:'Estagiários',
     pacientes:'Pacientes',agendamentos:'Agendamentos',relatorio:'Relatórios',
-    solicitacoes:'Solicitações',disponibilidade:'Minha disponibilidade',
-    meus:'Meus agendamentos'
+    solicitacoes:'Solicitações',disponibilidade:'Disponibilidades',
+    regras_horario:'Quadro de horários',meus:'Meus agendamentos'
   };
   nav.innerHTML = pages.map(p => `<button data-page="${p}">${labels[p] || p}</button>`).join('');
   nav.querySelectorAll('button').forEach(button => {
@@ -651,7 +723,7 @@ function render() {
     dashboard:'Dashboard',agenda:'Agenda',estagiarios:'Estagiários',
     pacientes:'Pacientes',agendamentos:'Agendamentos',relatorio:'Relatórios',
     solicitacoes:'Solicitações',disponibilidade:'Minha disponibilidade',
-    meus:'Meus agendamentos'
+    regras_horario:'Quadro de horários',meus:'Meus agendamentos'
   })[currentPage] || 'Dashboard';
   nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
 }
