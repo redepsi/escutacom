@@ -604,25 +604,13 @@ const coordinatorPages = {
       <p style="font-size:13px;color:#667085">Cadastro com inscrição, idade, gênero, nome opcional e disponibilidade opcional.</p>
     </section>
   `,
-  agendamentos: `
-    <section class="panel">
-      <div class="toolbar"><h2>Novo agendamento</h2></div>
-      <div class="notice">Cada atendimento ocupa 1 hora: 50 minutos de sessão + 10 minutos de intervalo. A sequência poderá ser criada para todo o semestre.</div>
-      <p style="font-size:13px;color:#667085">O próximo passo conectará esta tela às disponibilidades do paciente e do estagiário, bloqueios e conflitos.</p>
-      <button class="action">Novo agendamento</button>
-    </section>
-  `,
   agenda: `
     <section class="panel"><h2>Agenda</h2><p style="font-size:13px;color:#667085">Calendário integrado aos agendamentos reais será conectado na próxima etapa.</p></section>
   `,
   relatorio: `
     <section class="hero"><h2>Relatórios</h2><p>Selecione um estagiário para visualizar horas, pacientes e atendimentos realizados.</p></section>
   `,
-  solicitacoes: `
-    <section class="panel"><h2>Solicitações de cadastro</h2><div class="notice">Aqui aparecerão os estagiários que solicitaram cadastro e aguardam autorização.</div></section>
-  `,
-  disponibilidade: `<section class="panel"><h2>Disponibilidade</h2></section>`,
-  regras_horario: `<section class="panel"><h2>Configurações da clínica</h2></section>`
+  regras_horario: `<section class="panel"><h2>Configurações</h2><p style="font-size:13px;color:#667085">Aqui ficarão o quadro de horários da clínica e as configurações gerais da agenda.</p></section>`
 };
 
 const internPages = {
@@ -685,10 +673,14 @@ function updateContextNavigation() {
 
 function buildNav(pages) {
   const labels = {
-    dashboard:'Dashboard',agenda:'Agenda',estagiarios:'Estagiários',
-    pacientes:'Pacientes',agendamentos:'Agendamentos',relatorio:'Relatórios',
-    solicitacoes:'Solicitações',disponibilidade:'Estagiários',
-    regras_horario:'Configurações',meus:'Meus agendamentos'
+    dashboard:'Dashboard',
+    agenda:'Agenda',
+    estagiarios:'Estagiários',
+    pacientes:'Pacientes',
+    relatorio:'Relatórios',
+    regras_horario:'Configurações',
+    disponibilidade:'Minha disponibilidade',
+    meus:'Meus agendamentos'
   };
   nav.innerHTML = pages.map(p => `<button data-page="${p}">${labels[p] || p}</button>`).join('');
   nav.querySelectorAll('button').forEach(button => {
@@ -716,12 +708,6 @@ function render() {
     title.textContent = 'Estagiários';
     nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
     internListPage();
-    return;
-  }
-  if (currentContext === 'coordenacao' && currentPage === 'solicitacoes') {
-    title.textContent = 'Solicitações';
-    nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
-    registrationRequestsPage();
     return;
   }
   const pages = currentContext === 'coordenacao' ? coordinatorPages : internPages;
