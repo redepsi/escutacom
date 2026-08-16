@@ -95,17 +95,14 @@ let currentContext = 'coordenacao';
 const internListPage = async () => {
   content.innerHTML = `
     <section class="panel">
-      <div class="toolbar">
-        <h2>Estagiários</h2>
-        <div class="right">
-          <button id="newInternBtn" class="action">+ Novo estagiário</button>
-        </div>
+      <div class="toolbar"><h2>Estagiários</h2>
+        <div class="right"><button id="newInternBtn" class="action">+ Novo estagiário</button></div>
       </div>
       <div id="internLoading" class="notice">Carregando estagiários do Supabase...</div>
       <div id="internTableWrap"></div>
     </section>
-    <section id="newInternPanel" class="panel hidden">
-      <h2>Novo estagiário</h2>
+    <section id="internFormPanel" class="panel hidden">
+      <div class="toolbar"><h2 id="internFormTitle">Novo estagiário</h2></div>
       <div class="formgrid">
         <div class="field"><label>Nome</label><input id="newInternName" placeholder="Nome completo"></div>
         <div class="field"><label>Matrícula</label><input id="newInternRegistration" placeholder="Matrícula"></div>
@@ -113,82 +110,71 @@ const internListPage = async () => {
         <div class="field"><label>Período / semestre</label><input id="newInternSemester" type="number" min="1" max="20" placeholder="8"></div>
         <div class="field"><label>Abordagens de preferência</label><input id="newInternApproaches" placeholder="Opcional"></div>
         <div class="field"><label>Público de preferência</label><input id="newInternAudience" placeholder="Opcional"></div>
+        <div class="field"><label>Status</label><select id="newInternStatus"><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select></div>
       </div>
-      <div style="margin-top:14px"><button id="saveInternBtn" class="action">Salvar estagiário</button> <button id="cancelInternBtn" class="action secondary">Cancelar</button></div>
+      <div style="margin-top:14px"><button id="saveInternBtn" class="action">Salvar</button> <button id="cancelInternBtn" class="action secondary">Cancelar</button></div>
       <div id="internFormMessage" class="message"></div>
-    </section>
-  `;
+    </section>`;
+
   const loading = document.getElementById('internLoading');
   const wrap = document.getElementById('internTableWrap');
 
-  const { data, error } = await db
-    .from('interns')
-    .select('id, full_name, registration_number, whatsapp, current_semester, preferred_approaches, preferred_audience, status')
+  const { data, error } = await db.from('interns')
+    .select('id, full_name, registration_number, whatsapp, current_semester, preferred_approaches, preferred_audience, status, user_id')
     .order('full_name');
 
   if (error) {
-    loading.className = 'message error';
-    loading.style.display = 'block';
-    loading.textContent = 'Não foi possível carregar os estagiários: ' + error.message;
-    return;
+    loading.className='message error'; loading.style.display='block';
+    loading.textContent='Não foi possível carregar os estagiários: '+error.message; return;
   }
-
   loading.remove();
 
-  const rows = (data || []).map(i => {
-    const phone = (i.whatsapp || '').replace(/\D/g,'');
-    const wa = phone ? `<a href="https://wa.me/55${phone}" target="_blank" rel="noopener" style="color:#2f855a;font-weight:700;text-decoration:none">📱 ${i.whatsapp}</a>` : '—';
-    const status = i.status === 'ativo' ? '<span class="badge green">Ativo</span>' : '<span class="badge red">Inativo</span>';
-    return `<tr>
-      <td>${escapeHtml(i.full_name)}</td>
-      <td>${escapeHtml(i.registration_number)}</td>
-      <td>${i.current_semester}º semestre</td>
-      <td>${wa}</td>
-      <td>${escapeHtml(i.preferred_approaches || '—')}</td>
-      <td>${escapeHtml(i.preferred_audience || '—')}</td>
-      <td>${status}</td>
-    </tr>`;
+  const rows=(data||[]).map(i=>{
+    const phone=(i.whatsapp||'').replace(/\D/g,'');
+    const wa=phone ? `<a href="https://wa.me/55${phone}" target="_blank" rel="noopener" style="color:#2f855a;font-weight:700;text-decoration:none">📱 ${escapeHtml(i.whatsapp)}</a>` : '—';
+    const status=i.status==='ativo'?'<span class="badge green">Ativo</span>':'<span class="badge red">Inativo</span>';
+    const access=i.user_id?'<span class="badge green">Conta vinculada</span>':'<span class="badge yellow">Sem acesso</span>';
+    return `<tr><td><strong>${escapeHtml(i.full_name)}</strong></td><td>${escapeHtml(i.registration_number)}</td><td>${i.current_semester}º semestre</td><td>${wa}</td><td>${escapeHtml(i.preferred_approaches||'—')}</td><td>${escapeHtml(i.preferred_audience||'—')}</td><td>${access}</td><td>${status}</td><td><button class="action secondary edit-intern" data-id="${i.id}" style="padding:7px 10px">Editar</button></td></tr>`;
   }).join('');
 
-  wrap.innerHTML = `<table>
-    <tr><th>Nome</th><th>Matrícula</th><th>Período</th><th>WhatsApp</th><th>Abordagens</th><th>Público</th><th>Acesso</th></tr>
-    ${rows || '<tr><td colspan="7">Nenhum estagiário cadastrado.</td></tr>'}
-  </table>`;
+  wrap.innerHTML=`<div style="overflow:auto"><table><tr><th>Nome</th><th>Matrícula</th><th>Período</th><th>WhatsApp</th><th>Abordagens</th><th>Público</th><th>Acesso</th><th>Status</th><th>Ações</th></tr>${rows||'<tr><td colspan="9">Nenhum estagiário cadastrado.</td></tr>'}</table></div>`;
 
-  document.getElementById('newInternBtn').onclick = () => document.getElementById('newInternPanel').classList.remove('hidden');
-  document.getElementById('cancelInternBtn').onclick = () => document.getElementById('newInternPanel').classList.add('hidden');
+  const panel=document.getElementById('internFormPanel'), titleForm=document.getElementById('internFormTitle');
+  let editingId=null;
+  const reset=()=>{editingId=null;titleForm.textContent='Novo estagiário';['Name','Registration','Whatsapp','Semester','Approaches','Audience'].forEach(x=>{const e=document.getElementById('newIntern'+x);if(e)e.value=''});document.getElementById('newInternStatus').value='ativo';document.getElementById('internFormMessage').style.display='none'};
 
-  document.getElementById('saveInternBtn').onclick = async () => {
-    const btn = document.getElementById('saveInternBtn');
-    const msg = document.getElementById('internFormMessage');
-    btn.disabled = true;
-    const payload = {
-      full_name: document.getElementById('newInternName').value.trim(),
-      registration_number: document.getElementById('newInternRegistration').value.trim(),
-      whatsapp: document.getElementById('newInternWhatsapp').value.trim(),
-      current_semester: Number(document.getElementById('newInternSemester').value),
-      preferred_approaches: document.getElementById('newInternApproaches').value.trim() || null,
-      preferred_audience: document.getElementById('newInternAudience').value.trim() || null,
-      status: 'ativo'
+  document.getElementById('newInternBtn').onclick=()=>{reset();panel.classList.remove('hidden');panel.scrollIntoView({behavior:'smooth'})};
+  document.getElementById('cancelInternBtn').onclick=()=>{panel.classList.add('hidden');reset()};
+
+  wrap.querySelectorAll('.edit-intern').forEach(btn=>btn.onclick=()=>{
+    const i=(data||[]).find(x=>x.id===btn.dataset.id); if(!i)return;
+    editingId=i.id; titleForm.textContent='Editar estagiário';
+    document.getElementById('newInternName').value=i.full_name||'';
+    document.getElementById('newInternRegistration').value=i.registration_number||'';
+    document.getElementById('newInternWhatsapp').value=i.whatsapp||'';
+    document.getElementById('newInternSemester').value=i.current_semester||'';
+    document.getElementById('newInternApproaches').value=i.preferred_approaches||'';
+    document.getElementById('newInternAudience').value=i.preferred_audience||'';
+    document.getElementById('newInternStatus').value=i.status||'ativo';
+    panel.classList.remove('hidden'); panel.scrollIntoView({behavior:'smooth'});
+  });
+
+  document.getElementById('saveInternBtn').onclick=async()=>{
+    const btn=document.getElementById('saveInternBtn'),msg=document.getElementById('internFormMessage');btn.disabled=true;msg.style.display='none';
+    const payload={
+      full_name:document.getElementById('newInternName').value.trim(),
+      registration_number:document.getElementById('newInternRegistration').value.trim(),
+      whatsapp:document.getElementById('newInternWhatsapp').value.trim(),
+      current_semester:Number(document.getElementById('newInternSemester').value),
+      preferred_approaches:document.getElementById('newInternApproaches').value.trim()||null,
+      preferred_audience:document.getElementById('newInternAudience').value.trim()||null,
+      status:document.getElementById('newInternStatus').value
     };
-    if (!payload.full_name || !payload.registration_number || !payload.whatsapp || !payload.current_semester) {
-      msg.textContent = 'Preencha nome, matrícula, WhatsApp e semestre.';
-      msg.className = 'message error';
-      msg.style.display = 'block';
-      btn.disabled = false;
-      return;
+    if(!payload.full_name||!payload.registration_number||!payload.whatsapp||!payload.current_semester){
+      msg.textContent='Preencha nome, matrícula, WhatsApp e semestre.';msg.className='message error';msg.style.display='block';btn.disabled=false;return;
     }
-    const { error: insertError } = await db.from('interns').insert(payload);
-    if (insertError) {
-      msg.textContent = 'Não foi possível salvar: ' + insertError.message;
-      msg.className = 'message error';
-      msg.style.display = 'block';
-      btn.disabled = false;
-      return;
-    }
-    msg.textContent = 'Estagiário cadastrado com sucesso.';
-    msg.className = 'message success';
-    msg.style.display = 'block';
+    const result=editingId?await db.from('interns').update(payload).eq('id',editingId):await db.from('interns').insert(payload);
+    if(result.error){msg.textContent='Não foi possível salvar: '+result.error.message;msg.className='message error';msg.style.display='block';btn.disabled=false;return;}
     await internListPage();
   };
 };
@@ -196,6 +182,25 @@ const internListPage = async () => {
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 }
+
+const registrationRequestsPage = async () => {
+  content.innerHTML=`<section class="panel"><div class="toolbar"><h2>Solicitações de cadastro</h2></div><div id="reqLoading" class="notice">Carregando solicitações...</div><div id="reqWrap"></div></section>`;
+  const loading=document.getElementById('reqLoading'),wrap=document.getElementById('reqWrap');
+  const {data,error}=await db.from('intern_registration_requests').select('id,full_name,registration_number,whatsapp,semester,email,status,created_at').order('created_at',{ascending:false});
+  if(error){loading.className='message error';loading.style.display='block';loading.textContent='Erro: '+error.message;return;}
+  loading.remove();
+  const rows=(data||[]).map(r=>{
+    const badge=r.status==='pendente'?'<span class="badge yellow">Pendente</span>':r.status==='autorizado'?'<span class="badge green">Autorizado</span>':r.status==='recusado'?'<span class="badge red">Recusado</span>':'<span class="badge gray">Correção solicitada</span>';
+    const actions=r.status==='pendente'?`<button class="action authorize-request" data-id="${r.id}" style="padding:7px 10px">Autorizar</button>`:'—';
+    return `<tr><td><strong>${escapeHtml(r.full_name)}</strong></td><td>${escapeHtml(r.registration_number)}</td><td>${r.semester}º</td><td>${escapeHtml(r.whatsapp)}</td><td>${escapeHtml(r.email)}</td><td>${badge}</td><td>${actions}</td></tr>`;
+  }).join('');
+  wrap.innerHTML=`<div style="overflow:auto"><table><tr><th>Nome</th><th>Matrícula</th><th>Sem.</th><th>WhatsApp</th><th>E-mail</th><th>Status</th><th>Ações</th></tr>${rows||'<tr><td colspan="7">Nenhuma solicitação encontrada.</td></tr>'}</table></div>`;
+  wrap.querySelectorAll('.authorize-request').forEach(btn=>btn.onclick=async()=>{
+    const {error:updateError}=await db.from('intern_registration_requests').update({status:'autorizado',reviewed_by:currentProfile.id,reviewed_at:new Date().toISOString()}).eq('id',btn.dataset.id);
+    if(updateError){alert('Não foi possível autorizar: '+updateError.message);return;}
+    await registrationRequestsPage();
+  });
+};
 
 const coordinatorPages = {
   dashboard: `
@@ -324,6 +329,12 @@ function render() {
     title.textContent = 'Estagiários';
     nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
     internListPage();
+    return;
+  }
+  if (currentContext === 'coordenacao' && currentPage === 'solicitacoes') {
+    title.textContent = 'Solicitações';
+    nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
+    registrationRequestsPage();
     return;
   }
   const pages = currentContext === 'coordenacao' ? coordinatorPages : internPages;
