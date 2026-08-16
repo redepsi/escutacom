@@ -99,6 +99,8 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px
 .ec-toggle-slot:hover{filter:brightness(.97);transform:translateY(-1px)}
 .ec-toggle-slot:active{transform:translateY(0)}
 </style>
+
+<style>button,.action,select,input{cursor:pointer}.ec-toggle-slot{pointer-events:auto!important}</style>
 </head>
 <body>
 
@@ -761,7 +763,7 @@ const ecPrototypeReports = () => {
 
 const ecPrototypeSettings = () => {
   content.innerHTML=`
-  <section class="panel"><div class="toolbar"><div><h2>Quadro de horários da clínica</h2><div class="ec-muted">A coordenação define quais intervalos ficam liberados.</div></div><button class="action">Salvar quadro</button></div>
+  <section class="panel"><div class="toolbar"><div><h2>Quadro de horários da clínica</h2><div class="ec-muted">A coordenação define quais intervalos ficam liberados.</div></div><button class="action" id="ecSaveSchedule">Salvar quadro</button></div>
   <div class="notice">Clique para alternar entre <strong>🟢 Liberado</strong> e <strong>⚪ Fechado</strong>. Os estagiários só verão os horários liberados.</div>
   <div class="ec-calendar">
     <div class="ec-head">Horário</div><div class="ec-head">Seg</div><div class="ec-head">Ter</div><div class="ec-head">Qua</div><div class="ec-head">Qui</div><div class="ec-head">Sex</div><div class="ec-head">Sáb</div>
@@ -1064,6 +1066,74 @@ db.auth.onAuthStateChange(async (_event, session) => {
       showMessage(e.message || 'Não foi possível carregar seu perfil.');
     }
   }
+});
+
+
+// ------------------------------------------------------------
+// INTERAÇÕES DO FRONTEND — protótipo local editável
+// ------------------------------------------------------------
+const EC_LOCAL_KEY = 'escuta_frontend_state_v1';
+function ecGetState(){
+  try{return JSON.parse(localStorage.getItem(EC_LOCAL_KEY)) || {schedule:{}, patients:[]};}
+  catch{return {schedule:{}, patients:[]};}
+}
+function ecSaveState(state){localStorage.setItem(EC_LOCAL_KEY,JSON.stringify(state));}
+
+// Delegação de eventos: funciona mesmo quando as telas são recriadas por render().
+document.addEventListener('click', (event) => {
+  const toggle = event.target.closest('.ec-toggle-slot');
+  if(toggle){
+    const open = toggle.classList.contains('ec-open');
+    toggle.classList.toggle('ec-open', !open);
+    toggle.classList.toggle('ec-closed', open);
+    toggle.textContent = open ? '⚪ Fechado' : '🟢 Liberado';
+    return;
+  }
+
+  const view = event.target.closest('.ec-view');
+  if(view){
+    document.querySelectorAll('.ec-view').forEach(b=>b.classList.remove('active'));
+    view.classList.add('active');
+    return;
+  }
+
+  if(event.target.closest('#ecNewAppointment')){
+    const m=document.getElementById('ecAppointmentModal'); if(m)m.style.display='flex'; return;
+  }
+  if(event.target.closest('#ecClose') || event.target.closest('#ecCancel')){
+    const m=document.getElementById('ecAppointmentModal'); if(m)m.style.display='none'; return;
+  }
+  if(event.target.closest('#ecConfirm')){
+    alert('Agendamento criado no modo de demonstração. A conexão com o Supabase será feita na próxima etapa.');
+    const m=document.getElementById('ecAppointmentModal'); if(m)m.style.display='none'; return;
+  }
+
+  if(event.target.closest('#ecNewPatient')){
+    const m=document.getElementById('ecPatientModal'); if(m)m.style.display='flex'; return;
+  }
+  if(event.target.closest('#ecPatientClose') || event.target.closest('#ecPatientCancel')){
+    const m=document.getElementById('ecPatientModal'); if(m)m.style.display='none'; return;
+  }
+  if(event.target.closest('#ecPatientSave')){
+    alert('Paciente cadastrado no modo de demonstração.');
+    const m=document.getElementById('ecPatientModal'); if(m)m.style.display='none'; return;
+  }
+
+  const patientEdit=event.target.closest('.patientEdit');
+  if(patientEdit){alert('A edição do paciente está disponível no protótipo. A gravação no Supabase será conectada na próxima etapa.');return;}
+
+  if(event.target.closest('#ecSaveSchedule')){
+    alert('Quadro salvo no protótipo. Os horários liberados serão usados como filtro para os estagiários.'); return;
+  }
+
+  if(event.target.closest('#saveClinicSchedule')){
+    alert('Quadro salvo no protótipo.'); return;
+  }
+});
+
+// Impede o navegador de submeter formulários de protótipo e recarregar a página.
+document.addEventListener('submit', (event) => {
+  if(event.target.closest('.ec-modal')) event.preventDefault();
 });
 
 (async function init() {
