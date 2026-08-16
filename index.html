@@ -638,44 +638,94 @@ const coordinatorPages = {
       <div class="card"><small>Não confirmados</small><strong>2</strong></div>
     </div>
     <section class="panel">
-      <div class="toolbar"><h2>Período acadêmico</h2><div class="right"><span class="badge green">2026.2 ativo</span><button class="action secondary">Iniciar 2027.1</button></div></div>
-      <p style="font-size:13px;color:#667085;margin:0">O sistema calcula a progressão dos semestres e apresenta as mudanças para uma única confirmação da coordenação.</p>
+      <div class="toolbar"><h2>Período acadêmico</h2><div class="right"><span class="badge green">2026.2 ativo</span><button class="action secondary" id="advanceSemesterBtn">Confirmar início de 2027.1</button></div></div>
+      <p class="subtle">O semestre dos estagiários avança automaticamente. No início de cada semestre, você confirma a mudança uma única vez.</p>
     </section>
     <section class="panel">
-      <h2>Previsão de atendimentos</h2>
-      <div class="notice">Esta é a primeira tela conectada ao Supabase. Os próximos módulos substituirão estes dados demonstrativos por dados reais.</div>
+      <div class="toolbar"><h2>Previsão de atendimentos</h2><button class="action secondary" id="dashboardAgendaBtn">Ver agenda</button></div>
       <table>
         <tr><th>Horário</th><th>Paciente</th><th>Estagiário</th><th>Confirmação</th><th>Status</th></tr>
-        <tr><td>14:00</td><td>#00342</td><td>Ana Beatriz</td><td><span class="badge green">Confirmado</span></td><td>Agendado</td></tr>
-        <tr><td>15:00</td><td>#00501</td><td>João Pedro</td><td><span class="badge yellow">Aguardando</span></td><td>Agendado</td></tr>
+        <tr><td>14:00–15:00</td><td>#00342</td><td>Ana Beatriz</td><td><span class="badge green">Confirmado</span></td><td>Agendado</td></tr>
+        <tr><td>15:00–16:00</td><td>#00501</td><td>João Pedro</td><td><span class="badge yellow">Aguardando</span></td><td>Agendado</td></tr>
+        <tr><td>16:00–17:00</td><td>#00418</td><td>Maria Clara</td><td><span class="badge red">Não confirmado</span></td><td>Agendado</td></tr>
       </table>
     </section>
   `,
-  estagiarios: `<section class="panel"><h2>Estagiários</h2><p>Carregando...</p></section>`,
+  estagiarios: `<section class="panel"><h2>Estagiários</h2><p class="subtle">Carregando...</p></section>`,
   pacientes: `
     <section class="panel">
-      <div class="toolbar"><h2>Pacientes</h2><button class="action" style="margin-left:auto">+ Novo paciente</button></div>
-      <p style="font-size:13px;color:#667085">Cadastro com inscrição, idade, gênero, nome opcional e disponibilidade opcional.</p>
+      <div class="toolbar">
+        <div><h2>Pacientes</h2><div class="subtle">Cadastre pacientes e use a disponibilidade para encontrar horários compatíveis.</div></div>
+        <button class="action" id="newPatientBtn">+ Novo paciente</button>
+      </div>
+      <div class="search-row"><input id="patientSearch" placeholder="Pesquisar por nome ou número de inscrição..."></div>
+      <div id="patientTableWrap">
+        <table>
+          <tr><th>Inscrição</th><th>Nome</th><th>Idade</th><th>Gênero</th><th>Disponibilidade</th><th>Status</th><th></th></tr>
+          <tr><td>#00342</td><td><strong>Ana Beatriz</strong></td><td>22</td><td>Mulher cisgênero</td><td>Seg–Qua, 13h–17h</td><td><span class="badge green">Ativo</span></td><td><button class="action secondary patientEdit">Editar</button></td></tr>
+          <tr><td>#00501</td><td><strong>João Pedro</strong></td><td>31</td><td>Homem cisgênero</td><td>Ter–Qui, 14h–17h</td><td><span class="badge green">Ativo</span></td><td><button class="action secondary patientEdit">Editar</button></td></tr>
+          <tr><td>#00418</td><td><strong>Maria Clara</strong></td><td>19</td><td>Mulher transgênero</td><td>Quarta, 13h–16h</td><td><span class="badge green">Ativo</span></td><td><button class="action secondary patientEdit">Editar</button></td></tr>
+        </table>
+      </div>
     </section>
+    <div id="patientModal" class="modal-backdrop" style="display:none">
+      <div class="modal">
+        <div class="toolbar"><h2>Novo paciente</h2><button class="action secondary" id="closePatient">Fechar</button></div>
+        <div class="formgrid">
+          <div class="field"><label>Número de inscrição</label><input placeholder="Ex.: 00621"></div>
+          <div class="field"><label>Nome <small>(opcional)</small></label><input placeholder="Nome do paciente"></div>
+          <div class="field"><label>Idade</label><input type="number" min="0"></div>
+          <div class="field"><label>Gênero</label><select><option>Mulher cisgênero</option><option>Homem cisgênero</option><option>Mulher transgênero</option><option>Homem transgênero</option><option>Pessoa não binária</option><option>Outra identidade de gênero</option><option>Prefere não informar</option></select></div>
+        </div>
+        <div class="notice" style="margin-top:14px"><strong>Disponibilidade (opcional)</strong><br>Depois do cadastro, você poderá informar os dias e horários em que o paciente pode comparecer.</div>
+        <div class="modal-actions"><button class="action secondary" id="cancelPatient">Cancelar</button><button class="action" id="savePatientMock">Cadastrar paciente</button></div>
+      </div>
+    </div>
   `,
   agenda: `<section class="panel"><h2>Agenda</h2></section>`,
-
   relatorio: `
-    <section class="hero"><h2>Relatórios</h2><p>Selecione um estagiário para visualizar horas, pacientes e atendimentos realizados.</p></section>
+    <section class="panel">
+      <div class="toolbar"><div><h2>Relatórios</h2><div class="subtle">Acompanhe a produção da clínica e consulte relatórios individuais.</div></div><button class="action secondary" id="generalReportBtn">Baixar relatório geral</button></div>
+      <div class="cards">
+        <div class="card"><small>Horas realizadas</small><strong>486h</strong></div>
+        <div class="card"><small>Pacientes ativos</small><strong>24</strong></div>
+        <div class="card"><small>Atendimentos realizados</small><strong>486</strong></div>
+        <div class="card"><small>Faltas</small><strong>18</strong></div>
+      </div>
+      <table>
+        <tr><th>Estagiário</th><th>Horas</th><th>Pacientes</th><th>Atendimentos</th><th></th></tr>
+        <tr><td>João Pedro</td><td>84h</td><td>6</td><td>84</td><td><button class="action secondary">Relatório</button></td></tr>
+        <tr><td>Ana Beatriz</td><td>72h</td><td>5</td><td>72</td><td><button class="action secondary">Relatório</button></td></tr>
+        <tr><td>Lucas Almeida</td><td>64h</td><td>4</td><td>64</td><td><button class="action secondary">Relatório</button></td></tr>
+      </table>
+    </section>
   `,
-  regras_horario: `<section class="panel"><h2>Configurações</h2><p style="font-size:13px;color:#667085">Aqui ficarão o quadro de horários da clínica e as configurações gerais da agenda.</p></section>`
+  regras_horario: `<section class="panel"><h2>Configurações</h2><p class="subtle">Quadro de horários da clínica.</p></section>`
 };
 
 const internPages = {
   dashboard: `
+    <div class="cards">
+      <div class="card"><small>Atendimentos hoje</small><strong>2</strong></div>
+      <div class="card"><small>Confirmados</small><strong>1</strong></div>
+      <div class="card"><small>Aguardando confirmação</small><strong>1</strong></div>
+      <div class="card"><small>Horas no semestre</small><strong>42h</strong></div>
+    </div>
     <section class="hero"><h2>Olá, ${'Dawton'}</h2><p>Você possui acesso de estagiário e de coordenador da agenda.</p></section>
-    <section class="panel"><h2>Meus próximos atendimentos</h2><div class="notice">As confirmações e os atendimentos serão carregados do banco nesta etapa.</div></section>
+    <section class="panel"><div class="toolbar"><h2>Meus próximos atendimentos</h2><button class="action secondary" id="internAppointmentsBtn">Ver meus agendamentos</button></div>
+      <table><tr><th>Data</th><th>Horário</th><th>Paciente</th><th>Confirmação</th><th>Ação</th></tr>
+      <tr><td>18/08</td><td>14:00–15:00</td><td>#00342</td><td><span class="badge yellow">Aguardando</span></td><td><button class="action secondary confirmMock">Confirmar</button></td></tr>
+      <tr><td>19/08</td><td>15:00–16:00</td><td>#00501</td><td><span class="badge green">Confirmado</span></td><td><button class="action secondary presenceMock">Registrar presença</button></td></tr></table>
+    </section>
   `,
-  disponibilidade: `
-    <section class="panel"><h2>Minha disponibilidade</h2><p style="font-size:13px;color:#667085">Aqui você poderá marcar sua disponibilidade semanal e bloquear horários específicos.</p></section>
-  `,
+  disponibilidade: `<section class="panel"><h2>Minha disponibilidade</h2><p class="subtle">Marque somente os horários que a clínica liberou.</p></section>`,
   meus: `
-    <section class="panel"><h2>Meus agendamentos</h2><p style="font-size:13px;color:#667085">Aqui aparecerão seus atendimentos, confirmação e registro de presença/ausência.</p></section>
+    <section class="panel"><div class="toolbar"><div><h2>Meus agendamentos</h2><div class="subtle">Confirme os atendimentos com antecedência e registre presença ou ausência.</div></div></div>
+      <table><tr><th>Data</th><th>Horário</th><th>Paciente</th><th>Confirmação</th><th>Presença</th></tr>
+      <tr><td>18/08/2026</td><td>14:00–15:00</td><td>#00342</td><td><button class="action secondary confirmMock">Confirmar</button></td><td>—</td></tr>
+      <tr><td>19/08/2026</td><td>15:00–16:00</td><td>#00501</td><td><span class="badge green">Confirmado</span></td><td><button class="action secondary presenceMock">Presente</button> <button class="action secondary absenceMock">Ausente</button></td></tr>
+      </table>
+    </section>
   `
 };
 
@@ -749,35 +799,57 @@ function render() {
     title.textContent = 'Agenda';
     nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
     agendaMockPage();
+    bindSimplePageActions();
     return;
   }
   if (currentPage === 'disponibilidade') {
     title.textContent = currentContext === 'estagiario' ? 'Minha disponibilidade' : 'Disponibilidade dos estagiários';
     nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
     availabilityPage();
+    bindSimplePageActions();
     return;
   }
   if (currentContext === 'coordenacao' && currentPage === 'regras_horario') {
     title.textContent = 'Regras de horário';
     nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
     availabilitySettingsPage();
+    bindSimplePageActions();
     return;
   }
   if (currentContext === 'coordenacao' && currentPage === 'estagiarios') {
     title.textContent = 'Estagiários';
     nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
     internListPage();
+    bindSimplePageActions();
     return;
   }
   const pages = currentContext === 'coordenacao' ? coordinatorPages : internPages;
   content.innerHTML = pages[currentPage] || pages.dashboard;
   title.textContent = ({
     dashboard:'Dashboard',agenda:'Agenda',estagiarios:'Estagiários',
-    pacientes:'Pacientes',agendamentos:'Agendamentos',relatorio:'Relatórios',
-    solicitacoes:'Solicitações',disponibilidade:'Minha disponibilidade',
+    pacientes:'Pacientes',relatorio:'Relatórios',
+    disponibilidade:'Minha disponibilidade',
     regras_horario:'Configurações',meus:'Meus agendamentos'
   })[currentPage] || 'Dashboard';
   nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
+}
+
+
+function bindSimplePageActions(){
+  document.querySelectorAll('.confirmMock').forEach(b=>b.onclick=()=>{b.outerHTML='<span class="badge green">Confirmado</span>';});
+  document.querySelectorAll('.presenceMock').forEach(b=>b.onclick=()=>{b.outerHTML='<span class="badge green">Presente</span>';});
+  document.querySelectorAll('.absenceMock').forEach(b=>b.onclick=()=>{b.outerHTML='<span class="badge red">Ausente</span>';});
+  const modal=document.getElementById('patientModal');
+  if(modal){
+    document.getElementById('newPatientBtn').onclick=()=>modal.style.display='flex';
+    document.getElementById('closePatient').onclick=()=>modal.style.display='none';
+    document.getElementById('cancelPatient').onclick=()=>modal.style.display='none';
+    document.getElementById('savePatientMock').onclick=()=>{alert('Cadastro demonstrativo. A gravação será conectada ao Supabase na etapa de integração.');modal.style.display='none';};
+  }
+  document.getElementById('advanceSemesterBtn')?.addEventListener('click',()=>alert('A mudança para 2027.1 será aplicada a todos os estagiários após sua confirmação.'));
+  document.getElementById('generalReportBtn')?.addEventListener('click',()=>alert('O relatório geral será gerado na integração final.'));
+  document.getElementById('dashboardAgendaBtn')?.addEventListener('click',()=>{currentPage='agenda';render();});
+  document.getElementById('internAppointmentsBtn')?.addEventListener('click',()=>{currentPage='meus';render();});
 }
 
 loginForm.addEventListener('submit', async (event) => {
