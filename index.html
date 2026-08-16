@@ -23,11 +23,11 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px
 .ec-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .ec-card{background:#fff;border:1px solid #e6e8ec;border-radius:14px;padding:16px}
 .ec-card h3{margin:0 0 6px}.ec-muted{font-size:12px;color:#667085}
-.ec-calendar{display:grid;grid-template-columns:80px repeat(6,1fr);border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
+.ec-calendar{display:grid;grid-template-columns:80px repeat(6,1fr);border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff;}
 .ec-calendar>div{padding:10px;border-right:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;min-height:68px}
 .ec-head{background:#f8fafc;font-weight:700;text-align:center;min-height:48px!important;display:flex;align-items:center;justify-content:center;}
-.ec-open{background:#e9f7ef;border-radius:9px;font-weight:700;cursor:pointer}
-.ec-closed{background:#f3f4f6;color:#98a2b3;border-radius:9px;cursor:pointer}
+.ec-open{background:#e9f7ef;border-radius:9px;font-weight:700;cursor:pointer;color:#176b36;border:1px solid #bce3cc;}
+.ec-closed{background:#f3f4f6;color:#98a2b3;border-radius:9px;cursor:pointer;border:1px solid #e5e7eb;}
 .ec-appt{border-radius:9px;padding:9px!important;min-height:58px!important}
 .ec-confirmed{background:#e9f7ef}.ec-wait{background:#fff4d6}.ec-no{background:#fdecec}
 .ec-appt strong,.ec-appt span,.ec-appt small{display:block}
@@ -37,20 +37,20 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px
 .ec-pill.active{background:#e7f3ec;color:#176b36;font-weight:700}
 .ec-status{display:inline-block;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:700}
 .ec-green{background:#e7f3ec;color:#176b36}.ec-yellow{background:#fff4d6;color:#8a5b00}.ec-red{background:#fdecec;color:#a12b2b}.ec-gray{background:#eef0f2;color:#475467}
-.ec-modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:1000}
-.ec-modal-box{background:white;border-radius:16px;padding:24px;width:min(820px,94vw);max-height:90vh;overflow:auto}
-.ec-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.ec-modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px;}
+.ec-modal-box{background:white;border-radius:16px;padding:24px;width:min(900px,100%);max-height:90vh;overflow:auto}
+.ec-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}
 @media(max-width:900px){.ec-grid{grid-template-columns:1fr}.ec-calendar{grid-template-columns:65px repeat(6,minmax(120px,1fr))}}
 
 .ec-toggle-slot{
   width:100%;
   min-height:48px;
-  border:0;
   font:inherit;
   text-align:center;
   cursor:pointer;
   padding:10px;
   border-radius:9px;
+  transition: 0.1s;
 }
 .ec-toggle-slot:hover{filter:brightness(.97);transform:translateY(-1px)}
 .ec-toggle-slot:active{transform:translateY(0)}
@@ -150,6 +150,42 @@ function escapeHtml(value) {
 }
 
 // -------------------------------------------------------------------------
+// COMPONENTE: GRADE DE DISPONIBILIDADE
+// -------------------------------------------------------------------------
+function generateAvailabilityGrid(clinicSlots, userSlots) {
+  const days = [{n:1, l:'Seg'},{n:2, l:'Ter'},{n:3, l:'Qua'},{n:4, l:'Qui'},{n:5, l:'Sex'},{n:6, l:'Sáb'}];
+  // Pega apenas os horários de início que a clínica liberou em pelo menos um dia
+  const enabledTimes = [...new Set((clinicSlots||[]).map(s => s.start_time.slice(0,5)))].sort();
+  
+  if(enabledTimes.length === 0) {
+      return `<div style="grid-column: 1/-1; padding: 20px; text-align: center;">Nenhum horário liberado pela clínica. Verifique o Quadro de Horários.</div>`;
+  }
+
+  let html = `<div class="ec-head">Horário</div>` + days.map(d=>`<div class="ec-head">${d.l}</div>`).join('');
+  
+  enabledTimes.forEach(time => {
+     const hourInt = parseInt(time.split(':')[0]);
+     const endHour = String(hourInt+1).padStart(2,'0') + ':00';
+     html += `<div><strong>${time} – ${endHour.split(':')[0]}h</strong></div>`;
+     
+     days.forEach(d => {
+        // Verifica se a clínica abriu neste dia e neste horário
+        const cSlot = clinicSlots.find(s => s.weekday === d.n && s.start_time.slice(0,5) === time);
+        if(cSlot) {
+           // Se abriu, verifica se o usuário (paciente/estagiário) marcou como disponível
+           const isSelected = userSlots.some(s => s.weekday === d.n && s.start_time.slice(0,5) === time);
+           const cssClass = isSelected ? 'ec-open' : 'ec-closed';
+           const text = isSelected ? '✓ Disponível' : 'Livre';
+           html += `<button type="button" class="${cssClass} ec-toggle-slot avail-slot" data-day="${d.n}" data-start="${time}:00" data-end="${endHour}:00">${text}</button>`;
+        } else {
+           html += `<div style="background:#f9fafb; color:#d0d5dd; font-size:11px; text-align:center; display:flex; align-items:center; justify-content:center; border-radius:9px; border:1px dashed #e5e7eb;">Fechado pela clínica</div>`;
+        }
+     });
+  });
+  return html;
+}
+
+// -------------------------------------------------------------------------
 // PÁGINA: ESTAGIÁRIOS
 // -------------------------------------------------------------------------
 const internListPage = async () => {
@@ -158,7 +194,7 @@ const internListPage = async () => {
       <div class="toolbar"><h2>Estagiários</h2>
         <div class="right"><button id="newInternBtn" class="action">+ Novo estagiário</button></div>
       </div>
-      <div id="internLoading" class="notice">Carregando estagiários do Supabase...</div>
+      <div id="internLoading" class="notice">Carregando estagiários...</div>
       <div id="internTableWrap"></div>
     </section>
     <section id="internFormPanel" class="panel hidden">
@@ -172,7 +208,7 @@ const internListPage = async () => {
         <div class="field"><label>Público de preferência (opcional)</label><input id="newInternAudience" placeholder="Ex: Adultos, Adolescentes"></div>
         <div class="field"><label>Status</label><select id="newInternStatus"><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select></div>
       </div>
-      <div style="margin-top:14px"><button id="saveInternBtn" class="action">Salvar</button> <button id="cancelInternBtn" class="action secondary">Cancelar</button></div>
+      <div style="margin-top:14px"><button id="saveInternBtn" class="action">Salvar estagiário</button> <button id="cancelInternBtn" class="action secondary">Cancelar</button></div>
       <div id="internFormMessage" class="message"></div>
     </section>`;
 
@@ -241,7 +277,7 @@ const internListPage = async () => {
 };
 
 // -------------------------------------------------------------------------
-// PÁGINA: PACIENTES
+// PÁGINA: PACIENTES (Com Grade de Disponibilidade)
 // -------------------------------------------------------------------------
 const ecPrototypePatients = async () => {
   content.innerHTML=`
@@ -252,20 +288,32 @@ const ecPrototypePatients = async () => {
     <tbody id="patientsTableBody"><tr><td colspan="5">Carregando pacientes...</td></tr></tbody>
   </table>
   </section>
-  <div class="ec-modal" id="ecPatientModal"><div class="ec-modal-box"><div class="toolbar"><h2 id="patientModalTitle">Novo paciente</h2><button class="action secondary" id="ecPatientClose">Fechar</button></div>
-  <div class="formgrid">
-    <div class="field"><label>Número de inscrição *</label><input id="patReg" placeholder="Ex.: 00342"></div>
-    <div class="field"><label>Nome</label><input id="patName" placeholder="Opcional"></div>
-    <div class="field"><label>Idade</label><input id="patAge" type="number" min="0"></div>
-    <div class="field"><label>Gênero</label><select id="patGender"><option>Mulher cisgênero</option><option>Homem cisgênero</option><option>Mulher transgênero</option><option>Homem transgênero</option><option>Pessoa não binária</option><option>Outra identidade</option><option>Prefiro não informar</option></select></div>
-    <div class="field"><label>Status</label><select id="patStatus"><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select></div>
-  </div>
-  <div class="ec-actions"><button class="action secondary" id="ecPatientCancel">Cancelar</button><button class="action" id="ecPatientSave">Cadastrar paciente</button></div></div></div>`;
+  <div class="ec-modal" id="ecPatientModal"><div class="ec-modal-box">
+    <div class="toolbar"><h2 id="patientModalTitle">Novo paciente</h2><button class="action secondary" id="ecPatientClose">Fechar</button></div>
+    <div class="formgrid">
+      <div class="field"><label>Número de inscrição *</label><input id="patReg" placeholder="Ex.: 00342"></div>
+      <div class="field"><label>Nome</label><input id="patName" placeholder="Opcional"></div>
+      <div class="field"><label>Idade</label><input id="patAge" type="number" min="0"></div>
+      <div class="field"><label>Gênero</label><select id="patGender"><option>Mulher cisgênero</option><option>Homem cisgênero</option><option>Mulher transgênero</option><option>Homem transgênero</option><option>Pessoa não binária</option><option>Outra identidade</option><option>Prefiro não informar</option></select></div>
+      <div class="field"><label>Status</label><select id="patStatus"><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select></div>
+    </div>
+    
+    <div style="margin-top:24px; padding-top:20px; border-top:1px solid #e5e9ef;">
+      <h3 style="margin:0 0 6px; font-size:15px;">Disponibilidade Semanal (Opcional)</h3>
+      <p class="ec-muted" style="margin:0 0 16px;">Marque abaixo os horários em que o paciente pode comparecer. Apenas horários liberados pela clínica são exibidos.</p>
+      <div class="ec-calendar" id="patAvailGrid">Carregando grade...</div>
+    </div>
+
+    <div class="ec-actions"><button class="action secondary" id="ecPatientCancel">Cancelar</button><button class="action" id="ecPatientSave">Salvar paciente</button></div>
+  </div></div>`;
 
   const m=document.getElementById('ecPatientModal');
   const tbody=document.getElementById('patientsTableBody');
   const msg=document.getElementById('patientMsg');
   let editingPatientId = null;
+
+  // Carrega os horários da clínica que estão ativos
+  const { data: clinicSlots } = await db.from('clinic_schedule_slots').select('*').eq('enabled', true);
 
   const loadPatients = async () => {
      const {data, error} = await db.from('patients').select('*').order('created_at', {ascending: false});
@@ -289,31 +337,36 @@ const ecPrototypePatients = async () => {
   const resetForm = () => {
     editingPatientId = null;
     document.getElementById('patientModalTitle').textContent = 'Novo paciente';
-    document.getElementById('ecPatientSave').textContent = 'Cadastrar paciente';
     document.getElementById('patReg').value='';
     document.getElementById('patName').value='';
     document.getElementById('patAge').value='';
     document.getElementById('patGender').value='Mulher cisgênero';
     document.getElementById('patStatus').value='ativo';
+    // Limpa a grade
+    document.getElementById('patAvailGrid').innerHTML = generateAvailabilityGrid(clinicSlots, []);
   };
 
   document.getElementById('ecNewPatient').onclick=()=>{ resetForm(); m.style.display='flex'; };
   document.getElementById('ecPatientClose').onclick=()=>m.style.display='none';
   document.getElementById('ecPatientCancel').onclick=()=>m.style.display='none';
   
-  tbody.addEventListener('click', (e) => {
+  tbody.addEventListener('click', async (e) => {
     if(e.target.classList.contains('edit-patient')) {
       const p = allPatients.find(x => x.id === e.target.dataset.id);
       if(!p) return;
       resetForm();
       editingPatientId = p.id;
       document.getElementById('patientModalTitle').textContent = 'Editar paciente';
-      document.getElementById('ecPatientSave').textContent = 'Salvar alterações';
       document.getElementById('patReg').value = p.registration_number || '';
       document.getElementById('patName').value = p.full_name || '';
       document.getElementById('patAge').value = p.age || '';
       document.getElementById('patGender').value = p.gender || 'Prefiro não informar';
       document.getElementById('patStatus').value = p.status || 'ativo';
+
+      // Busca a disponibilidade salva do paciente
+      const { data: pAvail } = await db.from('patient_availability').select('*').eq('patient_id', p.id);
+      document.getElementById('patAvailGrid').innerHTML = generateAvailabilityGrid(clinicSlots, pAvail || []);
+
       m.style.display='flex';
     }
   });
@@ -330,20 +383,106 @@ const ecPrototypePatients = async () => {
       status: document.getElementById('patStatus').value
     };
     
-    if(!payload.registration_number) { alert('Número de inscrição é obrigatório.'); btn.disabled=false; btn.textContent='Salvar'; return; }
+    if(!payload.registration_number) { alert('Número de inscrição é obrigatório.'); btn.disabled=false; btn.textContent='Salvar paciente'; return; }
 
-    const result = editingPatientId 
-        ? await db.from('patients').update(payload).eq('id', editingPatientId)
-        : await db.from('patients').insert([payload]);
+    // Salva ou atualiza os dados principais do paciente
+    const patientResult = editingPatientId 
+        ? await db.from('patients').update(payload).eq('id', editingPatientId).select().single()
+        : await db.from('patients').insert([payload]).select().single();
 
-    if(result.error) { 
-        alert('Erro ao salvar: '+result.error.message); 
-    } else { 
-        m.style.display='none'; 
-        await loadPatients(); 
+    if(patientResult.error) { 
+        alert('Erro ao salvar paciente: '+patientResult.error.message); 
+        btn.disabled=false; btn.textContent='Salvar paciente'; return; 
     }
+
+    const savedPatientId = patientResult.data.id;
+
+    // Lida com a Grade de Disponibilidade
+    // 1. Pega os horários marcados na tela
+    const selectedSlots = Array.from(document.querySelectorAll('#patAvailGrid .ec-open')).map(btn => ({
+        patient_id: savedPatientId,
+        weekday: parseInt(btn.dataset.day),
+        start_time: btn.dataset.start,
+        end_time: btn.dataset.end
+    }));
+
+    // 2. Apaga a disponibilidade antiga
+    await db.from('patient_availability').delete().eq('patient_id', savedPatientId);
     
-    btn.disabled=false; btn.textContent='Salvar';
+    // 3. Insere a nova disponibilidade (se houver)
+    if(selectedSlots.length > 0) {
+        await db.from('patient_availability').insert(selectedSlots);
+    }
+
+    m.style.display='none'; 
+    await loadPatients(); 
+    btn.disabled=false; btn.textContent='Salvar paciente';
+  };
+};
+
+// -------------------------------------------------------------------------
+// PÁGINA: DISPONIBILIDADE DO ESTAGIÁRIO (Menu Interno)
+// -------------------------------------------------------------------------
+const availabilityPage = async () => {
+  const isIntern = currentContext === 'estagiario';
+  if(!isIntern || !currentIntern) {
+      content.innerHTML = `<section class="panel"><p>Acesso restrito a estagiários vinculados.</p></section>`;
+      return;
+  }
+
+  content.innerHTML = `
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <h2>Minha disponibilidade</h2>
+          <div class="subtle">Marque os horários em que você pode realizar atendimentos. Apenas os horários liberados pela clínica estão disponíveis para seleção.</div>
+        </div>
+        <button id="saveMyAvailBtn" class="action">Salvar minha disponibilidade</button>
+      </div>
+      <div id="internAvailMsg" class="message"></div>
+      <div class="ec-calendar" id="internAvailGrid">
+        <div style="grid-column: 1/-1; padding: 20px; text-align: center;">Carregando grade...</div>
+      </div>
+    </section>`;
+
+  const grid = document.getElementById('internAvailGrid');
+  const msg = document.getElementById('internAvailMsg');
+
+  // Busca os horários da clínica e os que o estagiário já havia marcado
+  const { data: clinicSlots } = await db.from('clinic_schedule_slots').select('*').eq('enabled', true);
+  const { data: mySlots } = await db.from('intern_availability').select('*').eq('intern_id', currentIntern.id);
+
+  grid.innerHTML = generateAvailabilityGrid(clinicSlots, mySlots || []);
+
+  document.getElementById('saveMyAvailBtn').onclick = async () => {
+     const btn = document.getElementById('saveMyAvailBtn');
+     btn.disabled = true; btn.textContent = 'Salvando...'; msg.style.display = 'none';
+
+     // Pega os horários selecionados
+     const selectedSlots = Array.from(document.querySelectorAll('#internAvailGrid .ec-open')).map(b => ({
+         intern_id: currentIntern.id,
+         weekday: parseInt(b.dataset.day),
+         start_time: b.dataset.start,
+         end_time: b.dataset.end
+     }));
+
+     // Apaga os velhos e insere os novos
+     const { error: delErr } = await db.from('intern_availability').delete().eq('intern_id', currentIntern.id);
+     if(delErr) {
+         msg.textContent = 'Erro ao limpar grade: ' + delErr.message; msg.className = 'message error'; msg.style.display = 'block';
+         btn.disabled = false; btn.textContent = 'Salvar minha disponibilidade'; return;
+     }
+
+     if(selectedSlots.length > 0) {
+         const { error: insErr } = await db.from('intern_availability').insert(selectedSlots);
+         if(insErr) {
+             msg.textContent = 'Erro ao salvar horários: ' + insErr.message; msg.className = 'message error'; msg.style.display = 'block';
+             btn.disabled = false; btn.textContent = 'Salvar minha disponibilidade'; return;
+         }
+     }
+
+     msg.textContent = 'Sua disponibilidade foi salva com sucesso.'; msg.className = 'message success'; msg.style.display = 'block';
+     btn.disabled = false; btn.textContent = 'Salvar minha disponibilidade';
   };
 };
 
@@ -354,7 +493,7 @@ const ecPrototypeSettings = async () => {
   content.innerHTML=`
   <section class="panel"><div class="toolbar"><div><h2>Quadro de horários da clínica</h2><div class="ec-muted">A coordenação define quais intervalos ficam liberados.</div></div><button class="action" id="ecSaveSchedule">Salvar quadro</button></div>
   <div id="scheduleMsg" class="message"></div>
-  <div class="notice">Clique para alternar entre <strong>🟢 Liberado</strong> e <strong>⚪ Fechado</strong>. Os estagiários só verão os horários liberados para montar suas disponibilidades.</div>
+  <div class="notice">Clique para alternar entre <strong>🟢 Liberado</strong> e <strong>⚪ Fechado</strong>. Os estagiários e pacientes só verão os horários liberados para montar suas disponibilidades.</div>
   <div class="ec-calendar" id="scheduleGrid">
     <div style="grid-column: 1/-1; padding: 20px; text-align: center;">Carregando horários do Supabase...</div>
   </div></section>`;
@@ -416,7 +555,7 @@ const ecPrototypeSettings = async () => {
 };
 
 // -------------------------------------------------------------------------
-// DEMAIS PÁGINAS (Agenda, Relatórios, etc - Mock visual para Fases Futuras)
+// DEMAIS PÁGINAS MOCKADAS (Agenda, Relatórios, etc)
 // -------------------------------------------------------------------------
 const ecPrototypeAgenda = () => {
   content.innerHTML=`
@@ -459,7 +598,7 @@ const ecPrototypeAgenda = () => {
   document.getElementById('ecClose').onclick=()=>modal.style.display='none';
   document.getElementById('ecCancel').onclick=()=>modal.style.display='none';
   document.getElementById('ecConfirm').onclick=()=>{
-    alert('Protótipo validado. A geração real será conectada ao banco depois da auditoria.');
+    alert('Protótipo validado. A geração real será conectada ao banco na Fase 5.');
     modal.style.display='none';
   };
 };
@@ -476,19 +615,6 @@ const ecPrototypeReports = () => {
   <table><tr><th>Estagiário</th><th>Horas previstas</th><th>Realizadas</th><th>Pacientes</th><th>Presenças</th><th>Ausências</th><th></th></tr>
   <tr><td>João Pedro</td><td>120h</td><td>84h</td><td>6</td><td>80</td><td>4</td><td><button class="action secondary">PDF</button> <button class="action secondary">Excel</button></td></tr>
   <tr><td>Ana Beatriz</td><td>120h</td><td>76h</td><td>5</td><td>73</td><td>3</td><td><button class="action secondary">PDF</button> <button class="action secondary">Excel</button></td></tr></table></div></section>`;
-};
-
-const availabilityPage = async () => {
-  const isIntern = currentContext === 'estagiario';
-  content.innerHTML = `
-    <section class="panel">
-      <div class="toolbar">
-        <div>
-          <h2>${isIntern ? 'Minha disponibilidade' : 'Disponibilidade dos estagiários'}</h2>
-          <div class="subtle">Funcionalidade será conectada ao Supabase nas próximas fases.</div>
-        </div>
-      </div>
-    </section>`;
 };
 
 const coordinatorPages = {
@@ -524,7 +650,6 @@ const internPages = {
       </table>
     </section>
   `,
-  disponibilidade: `<section class="panel"><h2>Minha disponibilidade</h2><p class="subtle">Marque somente os horários que a clínica liberou.</p></section>`,
   meus: `
     <section class="panel"><div class="toolbar"><div><h2>Meus agendamentos</h2><div class="subtle">Confirme os atendimentos com antecedência e registre presença ou ausência.</div></div></div>
       <table><tr><th>Data</th><th>Horário</th><th>Paciente</th><th>Confirmação</th><th>Presença</th></tr>
@@ -650,7 +775,13 @@ document.addEventListener('click', (event) => {
     const open = toggle.classList.contains('ec-open');
     toggle.classList.toggle('ec-open', !open);
     toggle.classList.toggle('ec-closed', open);
-    toggle.textContent = open ? '⚪ Fechado' : '🟢 Liberado';
+    
+    // Altera o texto dependendo se é a grade da clínica ou a grade de disponibilidade
+    if(toggle.classList.contains('avail-slot')) {
+       toggle.textContent = open ? 'Livre' : '✓ Disponível';
+    } else {
+       toggle.textContent = open ? '⚪ Fechado' : '🟢 Liberado';
+    }
     return;
   }
   const view = event.target.closest('.ec-view');
