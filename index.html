@@ -11,7 +11,7 @@
 .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
 .login-card{width:min(420px,100%);background:#fff;border:1px solid #e5e9ef;border-radius:16px;padding:34px;box-shadow:0 12px 35px rgba(23,32,51,.07)}
 .brand{text-align:center;margin-bottom:28px}.brand h1{margin:0;color:#315c8c;font-size:25px}.brand p{color:#667085;font-size:13px;margin:8px 0 0}
-.field{margin-bottom:16px}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}.field input{width:100%;padding:12px;border:1px solid #d5dbe4;border-radius:9px;font-size:14px;outline:none}.field input:focus{border-color:#315c8c}
+.field{margin-bottom:16px}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}.field input, .field select{width:100%;padding:12px;border:1px solid #d5dbe4;border-radius:9px;font-size:14px;outline:none;background:#fff}.field input:focus, .field select:focus{border-color:#315c8c}
 .btn{width:100%;border:0;background:#315c8c;color:#fff;padding:12px 14px;border-radius:9px;font-weight:700;cursor:pointer}.btn:disabled{opacity:.6;cursor:not-allowed}
 .message{display:none;margin-top:14px;padding:11px 12px;border-radius:8px;font-size:13px}.message.error{display:block;background:#fdecec;color:#b42318}.message.success{display:block;background:#e8f5ee;color:#2f855a}
 .app{display:none;min-height:100vh}.side{width:240px;background:#fff;border-right:1px solid #e5e9ef;padding:24px 14px}.logo{font-weight:800;font-size:18px;margin:0 12px 28px}.logo span{color:#315c8c}.nav button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:12px 14px;border-radius:9px;margin:4px 0;color:#475467;font-size:14px;cursor:pointer}.nav button.active{background:#e8f0f8;color:#315c8c;font-weight:700}
@@ -20,46 +20,12 @@
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px;border-bottom:1px solid #e9edf2;font-size:13px}th{font-size:11px;color:#667085;background:#fafbfc}.hidden{display:none}
 @media(max-width:850px){.side{display:none}.main{padding:20px}.cards{grid-template-columns:repeat(2,1fr)}}
 
-.availability-table th,.availability-table td{min-width:145px}
-.slot{padding:10px;border-radius:10px;text-align:center;font-size:13px}
-.slot.free{background:#f3f4f6;color:#6b7280}
-.slot.selected{background:#e6f4ea;color:#176b36;font-weight:700}
-.slot.blocked{background:#f9e6e6;color:#9b2c2c;font-weight:700;cursor:not-allowed}
-.slot.selectable{display:block;cursor:pointer}
-.slot.selectable input{display:none}
-.slot.selectable.selected{outline:2px solid #2f855a}
-.subtle{font-size:13px;color:#6b7280;margin-top:4px}
-
-.coordinator-simple-menu{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:12px;margin-bottom:18px}
-.coordinator-simple-menu .menu-card{padding:16px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer}
-.coordinator-simple-menu .menu-card strong{display:block;margin-top:6px}
-.coordinator-simple-menu .menu-card span{font-size:12px;color:#6b7280}
-
-.agenda-controls{display:flex;align-items:center;gap:10px;margin:12px 0 18px}
-.agenda-controls strong{margin:0 8px}
-.agenda-grid{display:grid;grid-template-columns:80px repeat(5,1fr);border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
-.agenda-grid>div{min-height:74px;border-right:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;padding:10px}
-.agenda-head{background:#f8fafc;font-weight:700;text-align:center;min-height:52px!important}
-.agenda-head small{font-weight:400;color:#667085}
-.agenda-time{font-size:12px;color:#667085;background:#fafafa}
-.appt{border-radius:10px!important;margin:6px!important;min-height:58px!important}
-.appt strong,.appt span,.appt small{display:block}
-.appt span{font-size:12px;margin-top:4px}
-.appt small{font-size:11px;color:#667085;margin-top:2px}
-.appt.confirmed{background:#e8f6ee}
-.appt.waiting{background:#fff4d6}
-.appt.notconfirmed{background:#fbe8e8}
-.modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);align-items:center;justify-content:center;z-index:1000}
-.modal{background:#fff;border-radius:16px;padding:24px;width:min(760px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.2)}
-.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
-.preview-box{padding:14px;border-radius:10px;background:#f4f7fb;margin-top:12px}
-
 .ec-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
 .ec-card{background:#fff;border:1px solid #e6e8ec;border-radius:14px;padding:16px}
 .ec-card h3{margin:0 0 6px}.ec-muted{font-size:12px;color:#667085}
 .ec-calendar{display:grid;grid-template-columns:80px repeat(6,1fr);border:1px solid #e5e7eb;border-radius:12px;overflow:hidden}
 .ec-calendar>div{padding:10px;border-right:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;min-height:68px}
-.ec-head{background:#f8fafc;font-weight:700;text-align:center;min-height:48px!important}
+.ec-head{background:#f8fafc;font-weight:700;text-align:center;min-height:48px!important;display:flex;align-items:center;justify-content:center;}
 .ec-open{background:#e9f7ef;border-radius:9px;font-weight:700;cursor:pointer}
 .ec-closed{background:#f3f4f6;color:#98a2b3;border-radius:9px;cursor:pointer}
 .ec-appt{border-radius:9px;padding:9px!important;min-height:58px!important}
@@ -179,6 +145,13 @@ let currentIntern = null;
 let currentPage = 'dashboard';
 let currentContext = 'coordenacao';
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+}
+
+// -------------------------------------------------------------------------
+// PÁGINA: ESTAGIÁRIOS
+// -------------------------------------------------------------------------
 const internListPage = async () => {
   content.innerHTML = `
     <section class="panel">
@@ -195,8 +168,8 @@ const internListPage = async () => {
         <div class="field"><label>Matrícula</label><input id="newInternRegistration" placeholder="Matrícula"></div>
         <div class="field"><label>WhatsApp</label><input id="newInternWhatsapp" placeholder="(85) 99999-9999"></div>
         <div class="field"><label>Período / semestre</label><input id="newInternSemester" type="number" min="1" max="20" placeholder="8"></div>
-        <div class="field"><label>Abordagens de preferência</label><input id="newInternApproaches" placeholder="Opcional"></div>
-        <div class="field"><label>Público de preferência</label><input id="newInternAudience" placeholder="Opcional"></div>
+        <div class="field"><label>Abordagens de preferência (opcional)</label><input id="newInternApproaches" placeholder="Ex: TCC, Psicanálise"></div>
+        <div class="field"><label>Público de preferência (opcional)</label><input id="newInternAudience" placeholder="Ex: Adultos, Adolescentes"></div>
         <div class="field"><label>Status</label><select id="newInternStatus"><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select></div>
       </div>
       <div style="margin-top:14px"><button id="saveInternBtn" class="action">Salvar</button> <button id="cancelInternBtn" class="action secondary">Cancelar</button></div>
@@ -206,76 +179,245 @@ const internListPage = async () => {
   const loading = document.getElementById('internLoading');
   const wrap = document.getElementById('internTableWrap');
 
-  const { data, error } = await db.from('interns')
-    .select('id, full_name, registration_number, current_semester, status, user_id')
-    .order('full_name');
+  const { data, error } = await db.from('interns').select('*').order('full_name');
 
   if (error) {
     loading.className='message error'; loading.style.display='block';
-    loading.textContent='Não foi possível carregar os estagiários: '+error.message; return;
+    loading.textContent='Não foi possível carregar: '+error.message; return;
   }
   loading.remove();
 
   const rows=(data||[]).map(i=>{
     const status=i.status==='ativo'?'<span class="badge green">Ativo</span>':'<span class="badge red">Inativo</span>';
     const access=i.user_id?'<span class="badge green">Conta vinculada</span>':'<span class="badge yellow">Sem acesso</span>';
-    return `<tr><td><strong>${escapeHtml(i.full_name)}</strong></td><td>${escapeHtml(i.registration_number)}</td><td>${i.current_semester}º semestre</td><td>${access}</td><td>${status}</td><td><button class="action secondary edit-intern" data-id="${i.id}" style="padding:7px 10px">Editar</button></td></tr>`;
+    return `<tr><td><strong>${escapeHtml(i.full_name)}</strong></td><td>${escapeHtml(i.registration_number)}</td><td>${i.current_semester}º</td><td>${escapeHtml(i.whatsapp||'—')}</td><td>${access}</td><td>${status}</td><td><button class="action secondary edit-intern" data-id="${i.id}" style="padding:7px 10px">Editar</button></td></tr>`;
   }).join('');
 
-  wrap.innerHTML=`<div style="overflow:auto"><table><tr><th>Nome</th><th>Matrícula</th><th>Período</th><th>Acesso</th><th>Status</th><th>Ações</th></tr>${rows||'<tr><td colspan="6">Nenhum estagiário cadastrado.</td></tr>'}</table></div>`;
+  wrap.innerHTML=`<div style="overflow:auto"><table><tr><th>Nome</th><th>Matrícula</th><th>Sem.</th><th>WhatsApp</th><th>Acesso</th><th>Status</th><th>Ações</th></tr>${rows||'<tr><td colspan="7">Nenhum estagiário cadastrado.</td></tr>'}</table></div>`;
 
   const panel=document.getElementById('internFormPanel'), titleForm=document.getElementById('internFormTitle');
   let editingId=null;
-  const reset=()=>{editingId=null;titleForm.textContent='Novo estagiário';['Name','Registration','Whatsapp','Semester','Approaches','Audience'].forEach(x=>{const e=document.getElementById('newIntern'+x);if(e)e.value=''});document.getElementById('newInternStatus').value='ativo';document.getElementById('internFormMessage').style.display='none'};
+  const reset=()=>{
+    editingId=null; titleForm.textContent='Novo estagiário';
+    ['Name','Registration','Whatsapp','Semester','Approaches','Audience'].forEach(x=>{const e=document.getElementById('newIntern'+x);if(e)e.value=''});
+    document.getElementById('newInternStatus').value='ativo'; document.getElementById('internFormMessage').style.display='none';
+  };
 
   document.getElementById('newInternBtn').onclick=()=>{reset();panel.classList.remove('hidden');panel.scrollIntoView({behavior:'smooth'})};
   document.getElementById('cancelInternBtn').onclick=()=>{panel.classList.add('hidden');reset()};
+
+  wrap.querySelectorAll('.edit-intern').forEach(btn=>btn.onclick=()=>{
+    const i=(data||[]).find(x=>x.id===btn.dataset.id); if(!i)return;
+    editingId=i.id; titleForm.textContent='Editar estagiário';
+    document.getElementById('newInternName').value=i.full_name||'';
+    document.getElementById('newInternRegistration').value=i.registration_number||'';
+    document.getElementById('newInternWhatsapp').value=i.whatsapp||'';
+    document.getElementById('newInternSemester').value=i.current_semester||'';
+    document.getElementById('newInternApproaches').value=i.preferred_approaches||'';
+    document.getElementById('newInternAudience').value=i.preferred_audience||'';
+    document.getElementById('newInternStatus').value=i.status||'ativo';
+    panel.classList.remove('hidden'); panel.scrollIntoView({behavior:'smooth'});
+  });
+
+  document.getElementById('saveInternBtn').onclick=async()=>{
+    const btn=document.getElementById('saveInternBtn'),msg=document.getElementById('internFormMessage');
+    btn.disabled=true; btn.textContent='Salvando...'; msg.style.display='none';
+    const payload={
+      full_name:document.getElementById('newInternName').value.trim(),
+      registration_number:document.getElementById('newInternRegistration').value.trim(),
+      whatsapp:document.getElementById('newInternWhatsapp').value.trim(),
+      current_semester:Number(document.getElementById('newInternSemester').value),
+      preferred_approaches:document.getElementById('newInternApproaches').value.trim()||null,
+      preferred_audience:document.getElementById('newInternAudience').value.trim()||null,
+      status:document.getElementById('newInternStatus').value
+    };
+    if(!payload.full_name||!payload.registration_number){
+      msg.textContent='Preencha nome e matrícula.';msg.className='message error';msg.style.display='block';btn.disabled=false;btn.textContent='Salvar';return;
+    }
+    const result=editingId?await db.from('interns').update(payload).eq('id',editingId):await db.from('interns').insert([payload]);
+    if(result.error){msg.textContent='Erro ao salvar: '+result.error.message;msg.className='message error';msg.style.display='block';btn.disabled=false;btn.textContent='Salvar';return;}
+    await internListPage();
+  };
 };
 
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-}
-
-const availabilityPage = async () => {
-  const isIntern = currentContext === 'estagiario';
-  content.innerHTML = `
-    <section class="panel">
-      <div class="toolbar">
-        <div>
-          <h2>${isIntern ? 'Minha disponibilidade' : 'Disponibilidade dos estagiários'}</h2>
-          <div class="subtle">Funcionalidade será conectada ao Supabase nas próximas fases.</div>
-        </div>
-      </div>
-    </section>`;
-};
-
-const availabilitySettingsPage = async () => {
+// -------------------------------------------------------------------------
+// PÁGINA: PACIENTES
+// -------------------------------------------------------------------------
+const ecPrototypePatients = async () => {
   content.innerHTML=`
-    <section class="panel">
-      <div class="toolbar">
-        <div>
-          <h2>Quadro de horários da clínica</h2>
-          <div class="subtle">A coordenação define quais intervalos ficam liberados.</div>
-        </div>
-      </div>
-      <div class="notice">
-        Funcionalidade será conectada ao Supabase nas próximas fases. Por favor retorne para visualizar o protótipo local clicando em Dashboard e depois em Configurações novamente.
-      </div>
-    </section>`;
+  <section class="panel"><div class="toolbar"><div><h2>Pacientes</h2><div class="ec-muted">Cadastro e disponibilidade dos pacientes.</div></div><button class="action" id="ecNewPatient">+ Novo paciente</button></div>
+  <div id="patientMsg" class="message"></div>
+  <table>
+    <thead><tr><th>Inscrição</th><th>Nome</th><th>Idade</th><th>Gênero</th><th>Status</th></tr></thead>
+    <tbody id="patientsTableBody"><tr><td colspan="5">Carregando pacientes...</td></tr></tbody>
+  </table>
+  </section>
+  <div class="ec-modal" id="ecPatientModal"><div class="ec-modal-box"><div class="toolbar"><h2 id="patientModalTitle">Novo paciente</h2><button class="action secondary" id="ecPatientClose">Fechar</button></div>
+  <div class="formgrid">
+    <div class="field"><label>Número de inscrição *</label><input id="patReg" placeholder="Ex.: 00342"></div>
+    <div class="field"><label>Nome</label><input id="patName" placeholder="Opcional"></div>
+    <div class="field"><label>Idade</label><input id="patAge" type="number" min="0"></div>
+    <div class="field"><label>Gênero</label><select id="patGender"><option>Mulher cisgênero</option><option>Homem cisgênero</option><option>Mulher transgênero</option><option>Homem transgênero</option><option>Pessoa não binária</option><option>Outra identidade</option><option>Prefiro não informar</option></select></div>
+    <div class="field"><label>Status</label><select id="patStatus"><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select></div>
+  </div>
+  <div class="ec-actions"><button class="action secondary" id="ecPatientCancel">Cancelar</button><button class="action" id="ecPatientSave">Cadastrar paciente</button></div></div></div>`;
+
+  const m=document.getElementById('ecPatientModal');
+  const tbody=document.getElementById('patientsTableBody');
+  const msg=document.getElementById('patientMsg');
+  let editingPatientId = null;
+
+  const loadPatients = async () => {
+     const {data, error} = await db.from('patients').select('*').order('created_at', {ascending: false});
+     if(error) { tbody.innerHTML=`<tr><td colspan="5">Erro: ${error.message}</td></tr>`; return data; }
+     if(!data || data.length===0) { tbody.innerHTML=`<tr><td colspan="5">Nenhum paciente cadastrado.</td></tr>`; return data; }
+     tbody.innerHTML = data.map(p => {
+        const badge = p.status === 'ativo' ? 'ec-green' : 'ec-gray';
+        return `<tr>
+          <td><strong>${escapeHtml(p.registration_number)}</strong></td>
+          <td>${escapeHtml(p.full_name||'—')}</td>
+          <td>${p.age||'—'}</td>
+          <td>${escapeHtml(p.gender||'—')}</td>
+          <td><span class="ec-status ${badge}">${p.status}</span> <button class="action secondary edit-patient" data-id="${p.id}" style="padding:4px 8px; margin-left:10px; font-size:11px;">Editar</button></td>
+        </tr>`;
+     }).join('');
+     return data;
+  };
+  
+  const allPatients = await loadPatients();
+
+  const resetForm = () => {
+    editingPatientId = null;
+    document.getElementById('patientModalTitle').textContent = 'Novo paciente';
+    document.getElementById('ecPatientSave').textContent = 'Cadastrar paciente';
+    document.getElementById('patReg').value='';
+    document.getElementById('patName').value='';
+    document.getElementById('patAge').value='';
+    document.getElementById('patGender').value='Mulher cisgênero';
+    document.getElementById('patStatus').value='ativo';
+  };
+
+  document.getElementById('ecNewPatient').onclick=()=>{ resetForm(); m.style.display='flex'; };
+  document.getElementById('ecPatientClose').onclick=()=>m.style.display='none';
+  document.getElementById('ecPatientCancel').onclick=()=>m.style.display='none';
+  
+  tbody.addEventListener('click', (e) => {
+    if(e.target.classList.contains('edit-patient')) {
+      const p = allPatients.find(x => x.id === e.target.dataset.id);
+      if(!p) return;
+      resetForm();
+      editingPatientId = p.id;
+      document.getElementById('patientModalTitle').textContent = 'Editar paciente';
+      document.getElementById('ecPatientSave').textContent = 'Salvar alterações';
+      document.getElementById('patReg').value = p.registration_number || '';
+      document.getElementById('patName').value = p.full_name || '';
+      document.getElementById('patAge').value = p.age || '';
+      document.getElementById('patGender').value = p.gender || 'Prefiro não informar';
+      document.getElementById('patStatus').value = p.status || 'ativo';
+      m.style.display='flex';
+    }
+  });
+
+  document.getElementById('ecPatientSave').onclick=async()=>{
+    const btn = document.getElementById('ecPatientSave');
+    btn.disabled = true; btn.textContent = 'Salvando...';
+    
+    const payload = {
+      registration_number: document.getElementById('patReg').value.trim(),
+      full_name: document.getElementById('patName').value.trim() || null,
+      age: document.getElementById('patAge').value ? parseInt(document.getElementById('patAge').value) : null,
+      gender: document.getElementById('patGender').value,
+      status: document.getElementById('patStatus').value
+    };
+    
+    if(!payload.registration_number) { alert('Número de inscrição é obrigatório.'); btn.disabled=false; btn.textContent='Salvar'; return; }
+
+    const result = editingPatientId 
+        ? await db.from('patients').update(payload).eq('id', editingPatientId)
+        : await db.from('patients').insert([payload]);
+
+    if(result.error) { 
+        alert('Erro ao salvar: '+result.error.message); 
+    } else { 
+        m.style.display='none'; 
+        await loadPatients(); 
+    }
+    
+    btn.disabled=false; btn.textContent='Salvar';
+  };
 };
 
-const agendaMockPage = () => {
-  content.innerHTML = `
-    <section class="panel">
-      <div class="toolbar">
-        <div>
-          <h2>Agenda</h2>
-          <div class="subtle">Visualização semanal dos atendimentos. (Conexão Supabase em breve)</div>
-        </div>
-      </div>
-    </section>`;
+// -------------------------------------------------------------------------
+// PÁGINA: CONFIGURAÇÕES (Quadro de Horários)
+// -------------------------------------------------------------------------
+const ecPrototypeSettings = async () => {
+  content.innerHTML=`
+  <section class="panel"><div class="toolbar"><div><h2>Quadro de horários da clínica</h2><div class="ec-muted">A coordenação define quais intervalos ficam liberados.</div></div><button class="action" id="ecSaveSchedule">Salvar quadro</button></div>
+  <div id="scheduleMsg" class="message"></div>
+  <div class="notice">Clique para alternar entre <strong>🟢 Liberado</strong> e <strong>⚪ Fechado</strong>. Os estagiários só verão os horários liberados para montar suas disponibilidades.</div>
+  <div class="ec-calendar" id="scheduleGrid">
+    <div style="grid-column: 1/-1; padding: 20px; text-align: center;">Carregando horários do Supabase...</div>
+  </div></section>`;
+
+  const grid = document.getElementById('scheduleGrid');
+  const msg = document.getElementById('scheduleMsg');
+
+  const {data: slots, error} = await db.from('clinic_schedule_slots').select('*');
+  if(error) { grid.innerHTML = `<div style="grid-column: 1/-1; padding: 20px; text-align: center; color: red;">Erro ao carregar: ${error.message}</div>`; return; }
+
+  const days = [{n:1, l:'Segunda'},{n:2, l:'Terça'},{n:3, l:'Quarta'},{n:4, l:'Quinta'},{n:5, l:'Sexta'},{n:6, l:'Sábado'}];
+  const uniqueTimes = [...new Set((slots||[]).map(s => s.start_time.slice(0,5)))].sort();
+  
+  if(uniqueTimes.length === 0) {
+      grid.innerHTML = `<div style="grid-column: 1/-1; padding: 20px; text-align: center;">Nenhum horário gerado no banco. Rode o script SQL.</div>`;
+      return;
+  }
+
+  let html = `<div class="ec-head">Horário</div>` + days.map(d=>`<div class="ec-head">${d.l}</div>`).join('');
+  
+  uniqueTimes.forEach(time => {
+     const hourInt = parseInt(time.split(':')[0]);
+     const endHour = String(hourInt+1).padStart(2,'0') + ':00';
+     html += `<div><strong>${time.split(':')[0]}h – ${endHour.split(':')[0]}h</strong></div>`;
+     days.forEach(d => {
+        const slot = slots.find(s => s.weekday === d.n && s.start_time.slice(0,5) === time);
+        if(slot) {
+           const cssClass = slot.enabled ? 'ec-open' : 'ec-closed';
+           const text = slot.enabled ? '🟢 Liberado' : '⚪ Fechado';
+           html += `<button type="button" class="${cssClass} ec-toggle-slot" data-id="${slot.id}">${text}</button>`;
+        } else {
+           html += `<div></div>`;
+        }
+     });
+  });
+  grid.innerHTML = html;
+
+  document.getElementById('ecSaveSchedule').onclick = async () => {
+     const btn = document.getElementById('ecSaveSchedule');
+     btn.disabled = true; btn.textContent = 'Salvando...';
+     msg.style.display = 'none';
+
+     const updates = Array.from(document.querySelectorAll('.ec-toggle-slot')).map(b => ({
+         id: b.dataset.id,
+         enabled: b.classList.contains('ec-open')
+     }));
+
+     const {error} = await db.from('clinic_schedule_slots').upsert(updates);
+     
+     if(error) { 
+         msg.textContent = 'Erro ao salvar o quadro: ' + error.message; 
+         msg.className = 'message error'; msg.style.display = 'block';
+     } else {
+         msg.textContent = 'Quadro de horários atualizado com sucesso!';
+         msg.className = 'message success'; msg.style.display = 'block';
+     }
+     btn.disabled = false; btn.textContent = 'Salvar quadro';
+  };
 };
 
+// -------------------------------------------------------------------------
+// DEMAIS PÁGINAS (Agenda, Relatórios, etc - Mock visual para Fases Futuras)
+// -------------------------------------------------------------------------
 const ecPrototypeAgenda = () => {
   content.innerHTML=`
   <section class="panel">
@@ -322,29 +464,6 @@ const ecPrototypeAgenda = () => {
   };
 };
 
-const ecPrototypePatients = () => {
-  content.innerHTML=`
-  <section class="panel"><div class="toolbar"><div><h2>Pacientes</h2><div class="ec-muted">Cadastro e disponibilidade dos pacientes.</div></div><button class="action" id="ecNewPatient">+ Novo paciente</button></div>
-  <table><tr><th>Inscrição</th><th>Nome</th><th>Idade</th><th>Gênero</th><th>Disponibilidade</th><th>Status</th></tr>
-  <tr><td>#00342</td><td>Ana Beatriz</td><td>24</td><td>Mulher cisgênero</td><td>Seg–Qua, 13h–17h</td><td><span class="ec-status ec-green">Ativo</span></td></tr>
-  <tr><td>#00418</td><td>Maria Clara</td><td>31</td><td>Mulher transgênero</td><td>Ter, 14h–17h</td><td><span class="ec-status ec-green">Ativo</span></td></tr>
-  <tr><td>#00501</td><td>Não informado</td><td>19</td><td>Prefiro não informar</td><td>Qui, 13h–15h</td><td><span class="ec-status ec-gray">Inativo</span></td></tr></table></section>
-  <div class="ec-modal" id="ecPatientModal"><div class="ec-modal-box"><div class="toolbar"><h2>Novo paciente</h2><button class="action secondary" id="ecPatientClose">Fechar</button></div>
-  <div class="formgrid">
-    <div class="field"><label>Número de inscrição *</label><input placeholder="Ex.: 00342"></div>
-    <div class="field"><label>Nome</label><input placeholder="Opcional"></div>
-    <div class="field"><label>Idade</label><input type="number" min="0"></div>
-    <div class="field"><label>Gênero</label><select><option>Mulher cisgênero</option><option>Homem cisgênero</option><option>Mulher transgênero</option><option>Homem transgênero</option><option>Pessoa não binária</option><option>Outra identidade</option><option>Prefiro não informar</option></select></div>
-  </div>
-  <div class="notice" style="margin-top:14px">Disponibilidade é opcional e será marcada em uma grade semanal.</div>
-  <div class="ec-actions"><button class="action secondary" id="ecPatientCancel">Cancelar</button><button class="action" id="ecPatientSave">Cadastrar paciente</button></div></div></div>`;
-  const m=document.getElementById('ecPatientModal');
-  document.getElementById('ecNewPatient').onclick=()=>m.style.display='flex';
-  document.getElementById('ecPatientClose').onclick=()=>m.style.display='none';
-  document.getElementById('ecPatientCancel').onclick=()=>m.style.display='none';
-  document.getElementById('ecPatientSave').onclick=()=>{alert('Protótipo validado.');m.style.display='none';};
-};
-
 const ecPrototypeReports = () => {
   content.innerHTML=`
   <section class="panel"><div class="toolbar"><div><h2>Relatórios</h2><div class="ec-muted">Relatórios gerais e individuais.</div></div><div><button class="action secondary">PDF</button> <button class="action">Excel</button></div></div>
@@ -359,19 +478,18 @@ const ecPrototypeReports = () => {
   <tr><td>Ana Beatriz</td><td>120h</td><td>76h</td><td>5</td><td>73</td><td>3</td><td><button class="action secondary">PDF</button> <button class="action secondary">Excel</button></td></tr></table></div></section>`;
 };
 
-const ecPrototypeSettings = () => {
-  content.innerHTML=`
-  <section class="panel"><div class="toolbar"><div><h2>Quadro de horários da clínica</h2><div class="ec-muted">A coordenação define quais intervalos ficam liberados.</div></div><button class="action" id="ecSaveSchedule">Salvar quadro</button></div>
-  <div class="notice">Clique para alternar entre <strong>🟢 Liberado</strong> e <strong>⚪ Fechado</strong>. Os estagiários só verão os horários liberados.</div>
-  <div class="ec-calendar">
-    <div class="ec-head">Horário</div><div class="ec-head">Seg</div><div class="ec-head">Ter</div><div class="ec-head">Qua</div><div class="ec-head">Qui</div><div class="ec-head">Sex</div><div class="ec-head">Sáb</div>
-    <div>13–14</div><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button>
-    <div>14–15</div><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button>
-    <div>15–16</div><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button>
-    <div>16–17</div><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button><button type="button" class="ec-open ec-toggle-slot">🟢 Liberado</button>
-  </div></section>`;
+const availabilityPage = async () => {
+  const isIntern = currentContext === 'estagiario';
+  content.innerHTML = `
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <h2>${isIntern ? 'Minha disponibilidade' : 'Disponibilidade dos estagiários'}</h2>
+          <div class="subtle">Funcionalidade será conectada ao Supabase nas próximas fases.</div>
+        </div>
+      </div>
+    </section>`;
 };
-
 
 const coordinatorPages = {
   dashboard: `
@@ -416,32 +534,24 @@ const internPages = {
   `
 };
 
+// -------------------------------------------------------------------------
+// MOTOR PRINCIPAL (Login e Navegação)
+// -------------------------------------------------------------------------
 function showMessage(text, type='error') {
   loginMessage.textContent = text;
   loginMessage.className = 'message ' + type;
 }
 
 async function loadProfile(user) {
-  const { data: profile, error: profileError } = await db
-    .from('profiles')
-    .select('id, full_name, role')
-    .eq('id', user.id)
-    .single();
-
-  if (profileError) {
-    throw new Error('Conta validada, mas o perfil no banco não foi encontrado. Execute o script SQL e cadastre o perfil.');
-  }
+  const { data: profile, error: profileError } = await db.from('profiles').select('id, full_name, role').eq('id', user.id).single();
+  if (profileError) throw new Error('Erro ao carregar perfil.');
 
   currentProfile = profile;
 
-  const { data: intern } = await db
-    .from('interns')
-    .select('id, full_name, registration_number, current_semester, status')
-    .eq('user_id', user.id)
-    .maybeSingle();
-
+  const { data: intern } = await db.from('interns').select('*').eq('user_id', user.id).maybeSingle();
   currentIntern = intern;
-  userName.textContent = `${profile.full_name} • ${profile.role === 'coordenador_agenda' ? 'Coordenação da agenda' : 'Estagiário'}`;
+  
+  userName.textContent = `${profile.full_name} • ${profile.role === 'coordenador_agenda' ? 'Coordenação' : 'Estagiário'}`;
 
   const canCoordinate = profile.role === 'coordenador_agenda' || profile.role === 'coordenador_projeto';
   const canIntern = !!intern;
@@ -474,10 +584,7 @@ function buildNav(pages) {
   };
   nav.innerHTML = pages.map(p => `<button data-page="${p}">${labels[p] || p}</button>`).join('');
   nav.querySelectorAll('button').forEach(button => {
-    button.addEventListener('click', () => {
-      currentPage = button.dataset.page;
-      render();
-    });
+    button.addEventListener('click', () => { currentPage = button.dataset.page; render(); });
   });
 }
 
@@ -488,6 +595,8 @@ function render() {
     if (currentPage === 'relatorio' || currentPage === 'relatorios') { ecPrototypeReports(); return; }
     if (currentPage === 'regras_horario' || currentPage === 'configuracoes') { ecPrototypeSettings(); return; }
     if (currentPage === 'estagiarios') { internListPage(); return; }
+  } else {
+    if (currentPage === 'disponibilidade') { availabilityPage(); return; }
   }
   
   const pages = currentContext === 'coordenacao' ? coordinatorPages : internPages;
@@ -510,38 +619,19 @@ function bindSimplePageActions(){
 
 loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  loginButton.disabled = true;
-  loginButton.textContent = 'Entrando...';
-  loginMessage.className = 'message';
-
+  loginButton.disabled = true; loginButton.textContent = 'Entrando...'; loginMessage.className = 'message';
   const email = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value;
-
   const { data, error } = await db.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    showMessage('Não foi possível entrar. Confira o e-mail e a senha.');
-    loginButton.disabled = false;
-    loginButton.textContent = 'Entrar';
-    return;
-  }
-
-  try {
-    await loadProfile(data.user);
-  } catch (e) {
-    await db.auth.signOut();
-    showMessage(e.message || 'Não foi possível carregar seu perfil.');
-  }
-
-  loginButton.disabled = false;
-  loginButton.textContent = 'Entrar';
+  if (error) { showMessage('Não foi possível entrar. Confira o e-mail e a senha.'); loginButton.disabled = false; loginButton.textContent = 'Entrar'; return; }
+  try { await loadProfile(data.user); } 
+  catch (e) { await db.auth.signOut(); showMessage(e.message || 'Erro ao carregar perfil.'); }
+  loginButton.disabled = false; loginButton.textContent = 'Entrar';
 });
 
 contextSelect.addEventListener('change', () => {
-  currentContext = contextSelect.value;
-  currentPage = 'dashboard';
-  updateContextNavigation();
-  render();
+  currentContext = contextSelect.value; currentPage = 'dashboard';
+  updateContextNavigation(); render();
   userName.textContent = currentContext === 'coordenacao'
     ? `${currentProfile.full_name} • Coordenação da agenda`
     : `${currentProfile.full_name} • Estagiário`;
@@ -549,13 +639,11 @@ contextSelect.addEventListener('change', () => {
 
 logoutButton.addEventListener('click', async () => {
   await db.auth.signOut();
-  app.style.display = 'none';
-  loadingScreen.style.display = 'none';
-  loginScreen.style.display = 'flex';
-  loginForm.reset();
-  showMessage('Você saiu do sistema.', 'success');
+  app.style.display = 'none'; loadingScreen.style.display = 'none'; loginScreen.style.display = 'flex';
+  loginForm.reset(); showMessage('Você saiu do sistema.', 'success');
 });
 
+// Eventos Globais de cliques dinâmicos
 document.addEventListener('click', (event) => {
   const toggle = event.target.closest('.ec-toggle-slot');
   if(toggle){
@@ -576,17 +664,13 @@ document.addEventListener('click', (event) => {
 (async function init() {
   const { data: { session } } = await db.auth.getSession();
   if (session?.user) {
-    try {
-      await loadProfile(session.user);
-    } catch (e) {
-      await db.auth.signOut();
-      loadingScreen.style.display = 'none';
-      loginScreen.style.display = 'flex';
-      showMessage(e.message || 'Não foi possível carregar seu perfil.');
+    try { await loadProfile(session.user); } 
+    catch (e) {
+      await db.auth.signOut(); loadingScreen.style.display = 'none'; loginScreen.style.display = 'flex';
+      showMessage(e.message || 'Erro ao carregar perfil.');
     }
   } else {
-    loadingScreen.style.display = 'none';
-    loginScreen.style.display = 'flex';
+    loadingScreen.style.display = 'none'; loginScreen.style.display = 'flex';
   }
 })();
 </script>
