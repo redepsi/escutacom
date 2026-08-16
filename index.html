@@ -32,6 +32,13 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 9px
 .slot.selectable.selected{outline:2px solid #2f855a}
 .subtle{font-size:13px;color:#6b7280;margin-top:4px}
 </style>
+
+<style>
+.coordinator-simple-menu{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:12px;margin-bottom:18px}
+.coordinator-simple-menu .menu-card{padding:16px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;cursor:pointer}
+.coordinator-simple-menu .menu-card strong{display:block;margin-top:6px}
+.coordinator-simple-menu .menu-card span{font-size:12px;color:#6b7280}
+</style>
 </head>
 <body>
 
@@ -410,7 +417,7 @@ const availabilitySettingsPage = async () => {
     <section class="panel">
       <div class="toolbar">
         <div>
-          <h2>Quadro de horários da clínica</h2>
+          <h2>Configurações da clínica</h2>
           <div class="subtle">Você define, por dia, quais intervalos de 1 hora ficam liberados para atendimento.</div>
         </div>
         <button id="saveClinicSchedule" class="action">Salvar quadro</button>
@@ -511,7 +518,7 @@ const availabilitySettingsPage = async () => {
       }
     }
 
-    msg.textContent='Quadro de horários salvo com sucesso.';
+    msg.textContent='Configurações salvo com sucesso.';
     msg.className='message success'; msg.style.display='block';
     btn.disabled=false;
   };
@@ -615,7 +622,7 @@ const coordinatorPages = {
     <section class="panel"><h2>Solicitações de cadastro</h2><div class="notice">Aqui aparecerão os estagiários que solicitaram cadastro e aguardam autorização.</div></section>
   `,
   disponibilidade: `<section class="panel"><h2>Disponibilidade</h2></section>`,
-  regras_horario: `<section class="panel"><h2>Quadro de horários da clínica</h2></section>`
+  regras_horario: `<section class="panel"><h2>Configurações da clínica</h2></section>`
 };
 
 const internPages = {
@@ -680,8 +687,8 @@ function buildNav(pages) {
   const labels = {
     dashboard:'Dashboard',agenda:'Agenda',estagiarios:'Estagiários',
     pacientes:'Pacientes',agendamentos:'Agendamentos',relatorio:'Relatórios',
-    solicitacoes:'Solicitações',disponibilidade:'Disponibilidades',
-    regras_horario:'Quadro de horários',meus:'Meus agendamentos'
+    solicitacoes:'Solicitações',disponibilidade:'Estagiários',
+    regras_horario:'Configurações',meus:'Meus agendamentos'
   };
   nav.innerHTML = pages.map(p => `<button data-page="${p}">${labels[p] || p}</button>`).join('');
   nav.querySelectorAll('button').forEach(button => {
@@ -723,7 +730,7 @@ function render() {
     dashboard:'Dashboard',agenda:'Agenda',estagiarios:'Estagiários',
     pacientes:'Pacientes',agendamentos:'Agendamentos',relatorio:'Relatórios',
     solicitacoes:'Solicitações',disponibilidade:'Minha disponibilidade',
-    regras_horario:'Quadro de horários',meus:'Meus agendamentos'
+    regras_horario:'Configurações',meus:'Meus agendamentos'
   })[currentPage] || 'Dashboard';
   nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
 }
