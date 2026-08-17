@@ -3,96 +3,2881 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Projeto Escuta Comunitária">
 <title>Projeto Escuta Comunitária</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-/* (Mantendo os estilos anteriores para brevidade, apenas adicionando os necessários) */
-*{box-sizing:border-box}body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f7fb;color:#172033}
-.panel{background:#fff;border:1px solid #e5e9ef;border-radius:12px;padding:20px;margin-bottom:20px}
-.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f7fb;color:#172033}
+
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.login-card{width:min(420px,100%);background:#fff;border:1px solid #e5e9ef;border-radius:16px;padding:34px;box-shadow:0 12px 35px rgba(23,32,51,.07)}
+.brand{text-align:center;margin-bottom:28px}
+.brand h1{margin:0;color:#315c8c;font-size:23px}
+.brand p{color:#667085;font-size:13px;margin:8px 0 0}
+
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;font-weight:700;margin-bottom:6px}
+.field input,.field select{width:100%;padding:12px;border:1px solid #d5dbe4;border-radius:9px;font-size:14px;outline:none;background:#fff}
+.field input:focus,.field select:focus{border-color:#315c8c}
+
+.btn{width:100%;border:0;background:#315c8c;color:#fff;padding:12px 14px;border-radius:9px;font-weight:700;cursor:pointer}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+
+.message{display:none;margin-top:14px;padding:11px 12px;border-radius:8px;font-size:13px}
+.message.error{display:block;background:#fdecec;color:#b42318}
+.message.success{display:block;background:#e8f5ee;color:#2f855a}
+
+.app{display:none;min-height:100vh}
+.side{width:240px;background:#fff;border-right:1px solid #e5e9ef;padding:24px 14px;flex-shrink:0}
+.logo{font-weight:800;font-size:17px;margin:0 12px 28px}
+.logo span{color:#315c8c}
+.nav button{display:block;width:100%;text-align:left;border:0;background:transparent;padding:12px 14px;border-radius:9px;margin:4px 0;color:#475467;font-size:14px;cursor:pointer}
+.nav button.active{background:#e8f0f8;color:#315c8c;font-weight:700}
+
+.main{flex:1;padding:28px 36px;max-width:1400px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.top h1{margin:0;font-size:24px}
+.profile{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.context-select{padding:10px 14px;border:1px solid #d5dbe4;border-radius:9px;background:#fff;font-weight:700;cursor:pointer}
+.user{background:#fff;border:1px solid #e5e9ef;padding:10px 14px;border-radius:9px;font-size:13px}
 .action{border:0;background:#315c8c;color:#fff;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer}
+.action.active{background:#315c8c;color:#fff}
 .secondary{background:#fff;color:#315c8c;border:1px solid #cbd6e2}
-.ec-pills{display:flex;gap:8px;margin-bottom:16px}
-.ec-pill{padding:7px 12px;border-radius:999px;background:#f2f4f7;font-size:12px;cursor:pointer;border:0}
-.ec-pill.active{background:#315c8c;color:#fff;font-weight:700}
-table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px;border-bottom:1px solid #e9edf2}
-.app{display:flex;min-height:100vh}.side{width:240px;background:#fff;border-right:1px solid #e5e9ef;padding:24px}.main{flex:1;padding:30px}
+.secondary.active{background:#315c8c;color:#fff;border-color:#315c8c}
+
+.panel{background:#fff;border:1px solid #e5e9ef;border-radius:12px;padding:20px;margin-bottom:20px}
+.panel h2{font-size:17px;margin:0 0 6px}
+.muted{color:#667085;font-size:13px}
+.toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px}
+.notice{padding:12px 14px;border-radius:8px;background:#fff5d8;color:#6b4b00;font-size:13px;margin-bottom:14px}
+
+.schedule-grid{display:grid;grid-template-columns:90px repeat(6,1fr);border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;background:#fff;gap:1px;background-color:#e5e7eb}
+.schedule-grid>div{background:#fff;padding:10px;min-height:56px;display:flex;align-items:center;justify-content:center;text-align:center}
+.schedule-head{background:#f8fafc!important;font-weight:700}
+.slot-btn{width:100%;height:100%;min-height:48px;font:inherit;font-weight:700;font-size:12px;text-align:center;cursor:pointer;border-radius:8px;border:1px solid transparent;transition:.1s}
+.slot-btn:hover{filter:brightness(.96)}
+.slot-open{background:#e9f7ef;color:#176b36;border-color:#bce3cc}
+.slot-closed{background:#f3f4f6;color:#98a2b3;border-color:#e5e7eb}
+
+.placeholder{padding:40px 20px;text-align:center;color:#98a2b3}
+.modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px}
+.modal-box{background:#fff;border-radius:16px;padding:24px;width:min(480px,100%);max-height:90vh;overflow:auto}
+
+#loadingScreen{display:flex;flex-direction:column;gap:12px}
+.spinner{border:3px solid #f3f3f3;border-top:3px solid #315c8c;border-radius:50%;width:30px;height:30px;animation:spin 1s linear infinite;margin:0 auto}
+@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+
+@media(max-width:850px){.side{display:none}.main{padding:20px}.schedule-grid{grid-template-columns:60px repeat(6,minmax(90px,1fr));font-size:11px}}
 </style>
 </head>
 <body>
-<!-- (Estrutura HTML mantida, apenas ajuste o script abaixo) -->
-<div id="app" class="app">
-  <aside class="side"><div class="logo">Escuta <span>Comunitária</span></div><nav id="nav"></nav></aside>
-  <main class="main"><h1 id="title">Agenda</h1><div id="content"></div></main>
+
+<div id="loadingScreen" class="login-wrap">
+  <div class="brand">
+    <div class="spinner"></div>
+    <p>Conectando ao sistema...</p>
+  </div>
+</div>
+
+<div id="loginScreen" class="login-wrap" style="display:none">
+  <div class="login-card">
+    <div class="brand">
+      <h1>Projeto Escuta Comunitária</h1>
+      <p>Gestão de atendimentos psicológicos</p>
+    </div>
+    <form id="loginForm">
+      <div class="field">
+        <label for="email">E-mail</label>
+        <input id="email" type="email" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="password">Senha</label>
+        <input id="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button id="loginButton" class="btn" type="submit">Entrar</button>
+      <div id="loginMessage" class="message"></div>
+    </form>
+  </div>
+</div>
+
+<div id="newPasswordScreen" class="login-wrap" style="display:none">
+  <div class="login-card">
+    <div class="brand">
+      <h1>Definir nova senha</h1>
+      <p>Escolha uma nova senha de acesso</p>
+    </div>
+    <form id="newPasswordForm">
+      <div class="field">
+        <label for="newPassword1">Nova senha</label>
+        <input id="newPassword1" type="password" autocomplete="new-password" required minlength="6">
+      </div>
+      <div class="field">
+        <label for="newPassword2">Confirmar nova senha</label>
+        <input id="newPassword2" type="password" autocomplete="new-password" required minlength="6">
+      </div>
+      <button id="newPasswordButton" class="btn" type="submit">Salvar nova senha</button>
+      <div id="newPasswordMessage" class="message"></div>
+    </form>
+  </div>
+</div>
+
+<div id="app" class="app" style="display:none">
+  <aside class="side">
+    <div class="logo">Escuta <span>Comunitária</span></div>
+    <nav id="nav" class="nav"></nav>
+  </aside>
+  <main class="main">
+    <div class="top">
+      <div>
+        <h1 id="pageTitle">Início</h1>
+      </div>
+      <div class="profile">
+        <div class="user" id="userName">Carregando...</div>
+        <select id="contextSelect" class="context-select" style="display:none">
+          <option value="coordenacao">Coordenação</option>
+          <option value="estagiario">Meu perfil de estagiário</option>
+        </select>
+        <button id="logoutButton" class="action secondary">Sair</button>
+      </div>
+    </div>
+    <div id="content"></div>
+  </main>
 </div>
 
 <script>
-// ... [Chaves Supabase e Init igual aos anteriores] ...
-const SUPABASE_URL = 'https://bhgwzqkdhbgfrlhcveqg.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_l8XeXHqjK6yRwFHjquGadg_e0PpDNXn';
-const db = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+// ---------------------------------------------------------------------------
+// CONFIGURAÇÃO DO SUPABASE
+// ---------------------------------------------------------------------------
+const SUPABASE_URL = 'https://qphcrtpngwgsszhtuctf.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_yo7cUtMbnflkSERbocknig_ZwYXw-B6';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Variáveis de Estado
-let appointments = [];
-let viewFilter = 'semana'; // hoje, semana, mes, geral
-let internFilter = 'todos'; // id do estagiário ou 'todos'
+// ---------------------------------------------------------------------------
+// ELEMENTOS DA TELA
+// ---------------------------------------------------------------------------
+const loadingScreen = document.getElementById('loadingScreen');
+const loginScreen = document.getElementById('loginScreen');
+const app = document.getElementById('app');
+const loginForm = document.getElementById('loginForm');
+const loginButton = document.getElementById('loginButton');
+const loginMessage = document.getElementById('loginMessage');
+const logoutButton = document.getElementById('logoutButton');
+const contextSelect = document.getElementById('contextSelect');
+const userName = document.getElementById('userName');
+const content = document.getElementById('content');
+const nav = document.getElementById('nav');
+const pageTitle = document.getElementById('pageTitle');
 
-const ecPrototypeAgenda = async () => {
-  const { data } = await db.from('appointments')
-    .select('id, appointment_date, start_time, end_time, patients(full_name, registration_number), interns(id, full_name)')
-    .order('appointment_date', { ascending: true });
-  appointments = data || [];
+// ---------------------------------------------------------------------------
+// ESTADO GLOBAL
+// ---------------------------------------------------------------------------
+let currentProfile = null;   // linha de profiles
+let currentIntern = null;    // linha de interns, se existir para este usuário
+let currentContext = 'coordenacao'; // 'coordenacao' ou 'estagiario'
+let currentPage = 'inicio';
 
-  content.innerHTML = `
-    <div class="toolbar">
-      <div class="ec-pills" id="timeFilter">
-        <button class="ec-pill" data-v="hoje">Hoje</button>
-        <button class="ec-pill active" data-v="semana">Semana</button>
-        <button class="ec-pill" data-v="mes">Mês</button>
-        <button class="ec-pill" data-v="geral">Geral</button>
-      </div>
-      <select id="internFilterSelect" class="context-select"><option value="todos">Todos os estagiários</option></select>
-      <button class="action" id="ecNewAppointment">+ Novo</button>
-    </div>
-    <section class="panel"><div id="agendaTableWrap"></div></section>
-  `;
+const WEEKDAYS = [
+  { n: 1, l: 'Segunda' }, { n: 2, l: 'Terça' }, { n: 3, l: 'Quarta' },
+  { n: 4, l: 'Quinta' }, { n: 5, l: 'Sexta' }, { n: 6, l: 'Sábado' }
+];
 
-  // Renderizar filtros
-  document.getElementById('timeFilter').onclick = (e) => {
-    if(!e.target.dataset.v) return;
-    document.querySelectorAll('.ec-pill').forEach(b=>b.classList.remove('active'));
-    e.target.classList.add('active');
-    viewFilter = e.target.dataset.v;
-    renderAgenda();
-  };
-
-  renderAgenda();
-};
-
-function renderAgenda() {
-  const today = new Date().toISOString().split('T')[0];
-  const now = new Date();
-  
-  let filtered = appointments.filter(a => {
-    const d = new Date(a.appointment_date);
-    if(viewFilter === 'hoje') return a.appointment_date === today;
-    if(viewFilter === 'semana') {
-       const weekEnd = new Date(); weekEnd.setDate(now.getDate() + 7);
-       return d >= now && d <= weekEnd;
-    }
-    if(viewFilter === 'mes') return d.getMonth() === now.getMonth();
-    return true; // geral
-  });
-
-  if(internFilter !== 'todos') filtered = filtered.filter(a => a.interns.id === internFilter);
-
-  const wrap = document.getElementById('agendaTableWrap');
-  wrap.innerHTML = `<table><tr><th>Data</th><th>Horário</th><th>Paciente</th><th>Estagiário</th></tr>
-  ${filtered.map(a => `<tr><td>${a.appointment_date}</td><td>${a.start_time.slice(0,5)}</td><td>${a.patients?.full_name}</td><td>${a.interns?.full_name}</td></tr>`).join('')}
-  </table>`;
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 }
 
-// ... [Adicionar lógica de abrir o Modal pré-preenchido mantida do anterior] ...
+function showMessage(text, type = 'error') {
+  loginMessage.textContent = text;
+  loginMessage.className = 'message ' + type;
+}
+
+// ---------------------------------------------------------------------------
+// LOGIN / LOGOUT
+// ---------------------------------------------------------------------------
+loginForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  loginButton.disabled = true;
+  loginButton.textContent = 'Entrando...';
+  loginMessage.className = 'message';
+
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const { data, error } = await db.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    showMessage('Erro ao entrar. Confira e-mail e senha.');
+    loginButton.disabled = false;
+    loginButton.textContent = 'Entrar';
+    return;
+  }
+
+  try {
+    await loadProfile(data.user);
+  } catch (e) {
+    await db.auth.signOut();
+    showMessage(e.message || 'Erro ao carregar perfil.');
+  }
+  loginButton.disabled = false;
+  loginButton.textContent = 'Entrar';
+});
+
+logoutButton.addEventListener('click', async () => {
+  await db.auth.signOut();
+  app.style.display = 'none';
+  loadingScreen.style.display = 'none';
+  loginScreen.style.display = 'flex';
+  loginForm.reset();
+  showMessage('Você saiu do sistema.', 'success');
+});
+
+// ---------------------------------------------------------------------------
+// CARREGAMENTO DO PERFIL LOGADO
+// ---------------------------------------------------------------------------
+function defaultPageForContext(context) {
+  return context === 'coordenacao' ? 'inicio' : 'minha_agenda';
+}
+
+async function loadProfile(user) {
+  const { data: profile, error: profileError } = await db
+    .from('profiles').select('id, full_name, role').eq('id', user.id).single();
+  if (profileError) throw new Error('Este usuário não possui um perfil cadastrado no sistema.');
+
+  currentProfile = profile;
+
+  const { data: intern } = await db
+    .from('interns').select('*').eq('id', user.id).maybeSingle();
+  currentIntern = intern || null;
+
+  const isCoord = profile.role === 'coordenador_agenda' || profile.role === 'coordenador_projeto';
+
+  // Se a pessoa é coordenação E também tem perfil de estagiário, mostra o seletor
+  if (isCoord && currentIntern) {
+    contextSelect.style.display = 'block';
+    contextSelect.value = 'coordenacao';
+    currentContext = 'coordenacao';
+  } else {
+    contextSelect.style.display = 'none';
+    currentContext = isCoord ? 'coordenacao' : 'estagiario';
+  }
+
+  updateUserLabel();
+  currentPage = defaultPageForContext(currentContext);
+  loadingScreen.style.display = 'none';
+  loginScreen.style.display = 'none';
+  app.style.display = 'flex';
+
+  buildNav();
+  render();
+}
+
+function updateUserLabel() {
+  const label = currentContext === 'coordenacao' ? 'Coordenação' : 'Estagiário';
+  userName.textContent = `${currentProfile.full_name} • ${label}`;
+}
+
+contextSelect.addEventListener('change', () => {
+  currentContext = contextSelect.value;
+  currentPage = defaultPageForContext(currentContext);
+  updateUserLabel();
+  buildNav();
+  render();
+});
+
+// ---------------------------------------------------------------------------
+// MENU
+// ---------------------------------------------------------------------------
+const COORD_PAGES = [
+  { id: 'inicio', label: 'Início' },
+  { id: 'agenda', label: 'Agenda' },
+  { id: 'grade_geral', label: 'Grade Geral' },
+  { id: 'pacientes', label: 'Pacientes' },
+  { id: 'estagiarios', label: 'Estagiários' },
+  { id: 'relatorios', label: 'Relatórios' },
+  { id: 'configuracoes', label: 'Horários' }
+];
+
+const INTERN_PAGES = [
+  { id: 'minha_agenda', label: 'Minha agenda' },
+  { id: 'minha_disponibilidade', label: 'Minha disponibilidade' },
+  { id: 'meu_perfil', label: 'Meu perfil' }
+];
+
+function buildNav() {
+  const pages = currentContext === 'coordenacao' ? COORD_PAGES : INTERN_PAGES;
+  nav.innerHTML = pages.map(p => `<button data-page="${p.id}">${p.label}</button>`).join('');
+  nav.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentPage = btn.dataset.page;
+      render();
+    });
+  });
+}
+
+function updateActiveNav() {
+  nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.page === currentPage));
+}
+
+// ---------------------------------------------------------------------------
+// ROTEAMENTO DE PÁGINAS
+// ---------------------------------------------------------------------------
+const PAGE_TITLES = {
+  inicio: 'Início', agenda: 'Agenda', grade_geral: 'Grade Geral de Disponibilidade',
+  pacientes: 'Pacientes', estagiarios: 'Estagiários', relatorios: 'Relatórios',
+  configuracoes: 'Horários', minha_agenda: 'Minha agenda',
+  minha_disponibilidade: 'Minha disponibilidade', meu_perfil: 'Meu perfil'
+};
+
+function render() {
+  pageTitle.textContent = PAGE_TITLES[currentPage] || 'Início';
+  updateActiveNav();
+
+  if (currentPage === 'configuracoes') { renderConfiguracoes(); return; }
+  if (currentPage === 'estagiarios') { renderEstagiarios(); return; }
+  if (currentPage === 'pacientes') { renderPacientes(); return; }
+  if (currentPage === 'minha_disponibilidade') { renderMinhaDisponibilidade(); return; }
+  if (currentPage === 'grade_geral') { renderGradeGeral(); return; }
+  if (currentPage === 'agenda') { renderAgenda(); return; }
+  if (currentPage === 'minha_agenda') { renderMinhaAgenda(); return; }
+  if (currentPage === 'meu_perfil') { renderMeuPerfil(); return; }
+  if (currentPage === 'relatorios') { renderRelatorios(); return; }
+  if (currentPage === 'inicio') { renderInicioCoordenacao(); return; }
+
+  // Páginas ainda não construídas
+  content.innerHTML = `
+    <section class="panel">
+      <div class="placeholder">Este módulo será construído na próxima etapa.</div>
+    </section>`;
+}
+
+// ---------------------------------------------------------------------------
+// PÁGINA: INÍCIO (coordenação e estagiário)
+// ---------------------------------------------------------------------------
+function dateWithWeekday(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const wd = WEEKDAYS.find(w => w.n === d.getDay());
+  return `${wd ? wd.l.slice(0, 3) : ''} ${fmtBr(dateStr)}`;
+}
+
+function miniApptTable(list, nameById, showEstagiario) {
+  if (!list || list.length === 0) return `<div class="placeholder">Nada por aqui.</div>`;
+  const rows = list.map(a => {
+    const patLabel = a.patients ? `#${a.patients.registration_number} ${a.patients.full_name || ''}` : '—';
+    const internCell = showEstagiario ? `<td style="text-align:left">${escapeHtml(nameById[a.intern_id] || '?')}</td>` : '';
+    return `<tr>
+      <td style="text-align:left">${dateWithWeekday(a.appointment_date)}</td>
+      <td style="text-align:left">${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}</td>
+      <td style="text-align:left">${escapeHtml(patLabel)}</td>
+      ${internCell}
+    </tr>`;
+  }).join('');
+  const internHead = showEstagiario ? '<th style="text-align:left">Estagiário</th>' : '';
+  return `<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <tr style="font-size:12px;color:#667085"><th style="text-align:left">Data</th><th style="text-align:left">Horário</th><th style="text-align:left">Paciente</th>${internHead}</tr>
+    ${rows}</table>`;
+}
+
+function hoursSinceEnd(dateStr, endTime) {
+  const end = new Date(`${dateStr}T${endTime}`);
+  return (new Date() - end) / 36e5;
+}
+
+function daysUntil(dateStr) {
+  const target = new Date(dateStr + 'T00:00:00');
+  const today = new Date(toDateStr(new Date()) + 'T00:00:00');
+  return Math.round((target - today) / 86400000);
+}
+
+function statCard(label, value, color) {
+  return `<div class="panel" style="margin-bottom:0;padding:18px">
+    <small class="muted">${label}</small>
+    <div style="font-size:26px;font-weight:700;margin-top:8px;color:${color || '#172033'}">${value}</div>
+  </div>`;
+}
+
+async function renderInicioCoordenacao() {
+  content.innerHTML = `
+    <div id="inicioCards" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
+      <div class="placeholder">Carregando...</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <section class="panel" style="margin-bottom:0"><h2>Próximos atendimentos</h2><div id="proximosWrap" class="placeholder">Carregando...</div></section>
+      <section class="panel" style="margin-bottom:0"><h2>Ações necessárias</h2><div id="acoesWrap" class="placeholder">Carregando...</div></section>
+    </div>`;
+
+  const todayStr = toDateStr(new Date());
+  const weekRange = getDateRange('semana', new Date());
+  const weekStartStr = toDateStr(weekRange.start);
+  const weekEndStr = toDateStr(weekRange.end);
+  const monthRange = getDateRange('mes', new Date());
+  const monthStartStr = toDateStr(monthRange.start);
+  const monthEndStr = toDateStr(monthRange.end);
+
+  const [{ data: weekAppts }, { data: upcoming }, { data: pendingConf }, { data: pendingAtt }] = await Promise.all([
+    db.from('appointments').select('id, appointment_date, start_time, end_time, intern_confirmation, intern_id, patients(registration_number, full_name)')
+      .gte('appointment_date', weekStartStr).lte('appointment_date', weekEndStr).eq('status', 'agendado').order('start_time'),
+    db.from('appointments').select('id, appointment_date, start_time, end_time, intern_id, patients(registration_number, full_name)')
+      .gt('appointment_date', todayStr).eq('status', 'agendado').order('appointment_date').order('start_time').limit(5),
+    db.from('appointments').select('id, appointment_date, start_time, end_time, intern_id, intern_confirmation, patient_confirmation, patients(registration_number, full_name)')
+      .gte('appointment_date', todayStr).lte('appointment_date', monthEndStr).eq('status', 'agendado')
+      .or('intern_confirmation.eq.aguardando,patient_confirmation.eq.aguardando')
+      .order('appointment_date').order('start_time'),
+    db.from('appointments').select('id, appointment_date, start_time, end_time, intern_id, patients(registration_number, full_name)')
+      .gte('appointment_date', monthStartStr).lte('appointment_date', todayStr).eq('status', 'agendado').eq('attendance_status', 'pendente')
+      .order('appointment_date')
+  ]);
+
+  const allInternIds = [...new Set([...(weekAppts || []), ...(upcoming || []), ...(pendingConf || []), ...(pendingAtt || [])].map(a => a.intern_id))];
+  const { data: profiles } = allInternIds.length ? await db.from('profiles').select('id, full_name').in('id', allInternIds) : { data: [] };
+  const nameById = {};
+  (profiles || []).forEach(p => { nameById[p.id] = p.full_name; });
+
+  const total = (weekAppts || []).length;
+  const confirmados = (weekAppts || []).filter(a => a.intern_confirmation === 'confirmado').length;
+  const aguardando = (weekAppts || []).filter(a => a.intern_confirmation === 'aguardando').length;
+  const naoConfirmados = (weekAppts || []).filter(a => a.intern_confirmation === 'nao_confirmado').length;
+
+  document.getElementById('inicioCards').innerHTML =
+    statCard('Atendimentos esta semana', total) +
+    statCard('Confirmados', confirmados, '#2f855a') +
+    statCard('Aguardando confirmação', aguardando, '#9a6700') +
+    statCard('Não confirmados', naoConfirmados, '#b42318');
+
+  document.getElementById('proximosWrap').innerHTML = miniApptTable(upcoming, nameById, true);
+
+  // ---- Ações necessárias ----
+  const confRows = (pendingConf || []).map(a => {
+    const urgent = daysUntil(a.appointment_date) <= 1;
+    const patLabel = a.patients ? `#${a.patients.registration_number} ${a.patients.full_name || ''}` : '—';
+    const quem = [];
+    if (a.intern_confirmation === 'aguardando') quem.push('estagiário');
+    if (a.patient_confirmation === 'aguardando') quem.push('paciente');
+    return `<tr>
+      <td style="text-align:left">${fmtBr(a.appointment_date)}</td>
+      <td style="text-align:left">${a.start_time.slice(0,5)}</td>
+      <td style="text-align:left">${escapeHtml(patLabel)}</td>
+      <td style="text-align:left">${escapeHtml(nameById[a.intern_id] || '?')}</td>
+      <td style="text-align:left"><span style="color:${urgent ? '#b42318' : '#9a6700'};font-weight:700;font-size:12px">Confirmação de ${quem.join(' e ')} pendente</span></td>
+    </tr>`;
+  }).join('');
+
+  const attRows = (pendingAtt || []).map(a => {
+    const overdue = hoursSinceEnd(a.appointment_date, a.end_time) > 48;
+    const patLabel = a.patients ? `#${a.patients.registration_number} ${a.patients.full_name || ''}` : '—';
+    return `<tr>
+      <td style="text-align:left">${fmtBr(a.appointment_date)}</td>
+      <td style="text-align:left">${a.start_time.slice(0,5)}</td>
+      <td style="text-align:left">${escapeHtml(patLabel)}</td>
+      <td style="text-align:left">${escapeHtml(nameById[a.intern_id] || '?')}</td>
+      <td style="text-align:left"><span style="color:${overdue ? '#b42318' : '#9a6700'};font-weight:700;font-size:12px">${overdue ? 'Presença atrasada (+48h)' : 'Presença ainda não registrada'}</span></td>
+    </tr>`;
+  }).join('');
+
+  const acoesRows = confRows + attRows;
+  document.getElementById('acoesWrap').innerHTML = acoesRows
+    ? `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="font-size:12px;color:#667085"><th style="text-align:left">Data</th><th style="text-align:left">Horário</th><th style="text-align:left">Paciente</th><th style="text-align:left">Estagiário</th><th style="text-align:left">Pendência</th></tr>
+        ${acoesRows}</table>`
+    : `<div class="placeholder">Nenhuma ação pendente no momento.</div>`;
+}
+
+async function loadInternStatsAndActions() {
+  const todayStr = toDateStr(new Date());
+  const weekRange = getDateRange('semana', new Date());
+  const weekStartStr = toDateStr(weekRange.start);
+  const weekEndStr = toDateStr(weekRange.end);
+
+  const [{ data: weekAppts }, { count: horasRealizadas }, { data: pendingConf }, { data: pendingAtt }] = await Promise.all([
+    db.from('appointments').select('id, appointment_date, start_time, end_time, intern_confirmation, patients(registration_number, full_name)')
+      .eq('intern_id', currentIntern.id).gte('appointment_date', weekStartStr).lte('appointment_date', weekEndStr).eq('status', 'agendado').order('start_time'),
+    db.from('appointments').select('id', { count: 'exact', head: true })
+      .eq('intern_id', currentIntern.id).eq('attendance_status', 'presente'),
+    db.from('appointments').select('id, appointment_date, start_time, end_time, patients(registration_number, full_name)')
+      .eq('intern_id', currentIntern.id).gte('appointment_date', todayStr).eq('status', 'agendado').eq('intern_confirmation', 'aguardando')
+      .order('appointment_date').order('start_time'),
+    db.from('appointments').select('id, appointment_date, start_time, end_time, patients(registration_number, full_name)')
+      .eq('intern_id', currentIntern.id).lte('appointment_date', todayStr).eq('status', 'agendado').eq('attendance_status', 'pendente')
+      .order('appointment_date')
+  ]);
+
+  const total = (weekAppts || []).length;
+  const confirmados = (weekAppts || []).filter(a => a.intern_confirmation === 'confirmado').length;
+  const aguardando = (weekAppts || []).filter(a => a.intern_confirmation === 'aguardando').length;
+
+  document.getElementById('inicioCards').innerHTML =
+    statCard('Atendimentos esta semana', total) +
+    statCard('Confirmados', confirmados, '#2f855a') +
+    statCard('Horas realizadas', `${horasRealizadas || 0}h`);
+
+  // Só urgente: confirmação para hoje/amanhã, ou presença atrasada (48h+)
+  const urgentConf = (pendingConf || []).filter(a => daysUntil(a.appointment_date) <= 1);
+  const urgentAtt = (pendingAtt || []).filter(a => hoursSinceEnd(a.appointment_date, a.end_time) >= 24);
+
+  const confRows = urgentConf.map(a => {
+    const patLabel = a.patients ? `#${a.patients.registration_number} ${a.patients.full_name || ''}` : '—';
+    return `<tr>
+      <td style="text-align:left">${fmtBr(a.appointment_date)}</td>
+      <td style="text-align:left">${a.start_time.slice(0,5)}</td>
+      <td style="text-align:left">${escapeHtml(patLabel)}</td>
+      <td style="text-align:left"><span style="color:#b42318;font-weight:700;font-size:12px">Confirme urgente</span></td>
+      <td><button class="action secondary action-confirm" data-id="${a.id}" style="padding:4px 8px;font-size:12px">Confirmar</button></td>
+    </tr>`;
+  }).join('');
+
+  const attRows = urgentAtt.map(a => {
+    const overdue = hoursSinceEnd(a.appointment_date, a.end_time) > 48;
+    const patLabel = a.patients ? `#${a.patients.registration_number} ${a.patients.full_name || ''}` : '—';
+    return `<tr>
+      <td style="text-align:left">${fmtBr(a.appointment_date)}</td>
+      <td style="text-align:left">${a.start_time.slice(0,5)}</td>
+      <td style="text-align:left">${escapeHtml(patLabel)}</td>
+      <td style="text-align:left"><span style="color:#b42318;font-weight:700;font-size:12px">${overdue ? 'Atrasado (+48h)' : 'Registre logo (perto de 48h)'}</span></td>
+      <td><button class="action secondary toggle-presence-inline" data-id="${a.id}" data-current="pendente"
+        style="padding:5px 10px;font-size:12px;background:#f3f4f6;color:#475467;border:1px solid #e5e7eb">Presença pendente</button></td>
+    </tr>`;
+  }).join('');
+
+  const acoesRows = confRows + attRows;
+  document.getElementById('acoesWrap').innerHTML = acoesRows
+    ? `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="font-size:12px;color:#667085"><th style="text-align:left">Data</th><th style="text-align:left">Horário</th><th style="text-align:left">Paciente</th><th style="text-align:left">Pendência</th><th style="text-align:left">Ação</th></tr>
+        ${acoesRows}</table>`
+    : `<div class="placeholder">Nenhum alerta urgente. Tudo em dia!</div>`;
+
+  document.querySelectorAll('.action-confirm').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { error } = await db.rpc('confirmar_atendimento', { p_appointment_id: btn.dataset.id, p_confirmacao: 'confirmado' });
+      if (error) alert('Erro: ' + error.message); else renderMinhaAgenda();
+    });
+  });
+  document.querySelectorAll('.toggle-presence-inline').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const current = btn.dataset.current;
+      const next = current === 'presente' ? 'ausente' : 'presente';
+      const { error } = await db.rpc('registrar_atendimento', { p_appointment_id: btn.dataset.id, p_status: next, p_cancelado_por: null });
+      if (error) { alert('Erro: ' + error.message); return; }
+      btn.dataset.current = next;
+      if (next === 'presente') {
+        btn.textContent = '✓ Compareceu';
+        btn.style.background = '#e9f7ef'; btn.style.color = '#176b36'; btn.style.borderColor = '#bce3cc';
+      } else {
+        btn.textContent = '✗ Não compareceu';
+        btn.style.background = '#fdecec'; btn.style.color = '#b42318'; btn.style.borderColor = '#f3c6c6';
+      }
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// PÁGINA: CONFIGURAÇÕES (Quadro de horários da clínica)
+// ---------------------------------------------------------------------------
+async function renderConfiguracoes() {
+  content.innerHTML = `
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <h2>Quadro de horários da clínica</h2>
+          <div class="muted">Clique em um horário para alternar entre Liberado e Fechado.</div>
+        </div>
+        <button id="saveScheduleBtn" class="action">Salvar quadro</button>
+      </div>
+      <div id="scheduleMsg" class="message"></div>
+      <div id="scheduleGrid" class="schedule-grid">
+        <div style="grid-column:1/-1;padding:20px;text-align:center">Carregando horários...</div>
+      </div>
+    </section>`;
+
+  const grid = document.getElementById('scheduleGrid');
+  const msg = document.getElementById('scheduleMsg');
+
+  const { data: slots, error } = await db
+    .from('clinic_schedule_slots').select('*').order('start_time');
+
+  if (error) {
+    grid.innerHTML = `<div style="grid-column:1/-1;padding:20px;color:#b42318">Erro ao carregar: ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+
+  const times = [...new Set(slots.map(s => s.start_time.slice(0, 5)))].sort();
+
+  let html = `<div class="schedule-head">Horário</div>` + WEEKDAYS.map(d => `<div class="schedule-head">${d.l}</div>`).join('');
+
+  times.forEach(time => {
+    const hour = parseInt(time.split(':')[0]);
+    const endHour = String(hour + 1).padStart(2, '0') + 'h';
+    html += `<div><strong>${time.slice(0,2)}h – ${endHour}</strong></div>`;
+    WEEKDAYS.forEach(d => {
+      const slot = slots.find(s => s.weekday === d.n && s.start_time.slice(0, 5) === time);
+      if (!slot) { html += `<div></div>`; return; }
+      const cls = slot.enabled ? 'slot-open' : 'slot-closed';
+      const label = slot.enabled ? '🟢 Liberado' : '⚪ Fechado';
+      html += `<div><button type="button" class="slot-btn ${cls}"
+        data-id="${slot.id}" data-weekday="${slot.weekday}"
+        data-start="${slot.start_time}" data-end="${slot.end_time}">${label}</button></div>`;
+    });
+  });
+
+  grid.innerHTML = html;
+
+  grid.querySelectorAll('.slot-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const open = btn.classList.contains('slot-open');
+      btn.classList.toggle('slot-open', !open);
+      btn.classList.toggle('slot-closed', open);
+      btn.textContent = open ? '⚪ Fechado' : '🟢 Liberado';
+    });
+  });
+
+  document.getElementById('saveScheduleBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('saveScheduleBtn');
+    btn.disabled = true;
+    btn.textContent = 'Salvando...';
+    msg.style.display = 'none';
+
+    const updates = Array.from(grid.querySelectorAll('.slot-btn')).map(b => ({
+      id: b.dataset.id,
+      weekday: parseInt(b.dataset.weekday),
+      start_time: b.dataset.start,
+      end_time: b.dataset.end,
+      enabled: b.classList.contains('slot-open')
+    }));
+
+    const { error: saveError } = await db.from('clinic_schedule_slots').upsert(updates);
+
+    if (saveError) {
+      msg.textContent = 'Erro ao salvar: ' + saveError.message;
+      msg.className = 'message error';
+    } else {
+      msg.textContent = 'Quadro de horários atualizado com sucesso.';
+      msg.className = 'message success';
+    }
+    msg.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Salvar quadro';
+  });
+}
+
+// ---------------------------------------------------------------------------
+// PÁGINA: MEU PERFIL (estagiário, somente leitura)
+// ---------------------------------------------------------------------------
+async function renderMeuPerfil() {
+  if (!currentIntern) {
+    content.innerHTML = `<section class="panel"><div class="placeholder">Você não possui um cadastro de estagiário vinculado a este login.</div></section>`;
+    return;
+  }
+
+  const wa = whatsappLink(currentIntern.whatsapp);
+  const waHtml = wa ? `<a href="${wa}" target="_blank" rel="noopener">${escapeHtml(currentIntern.whatsapp)}</a>` : (escapeHtml(currentIntern.whatsapp) || '—');
+
+  content.innerHTML = `
+    <section class="panel">
+      <h2 style="margin-top:0">Meu perfil</h2>
+      <div class="muted" style="margin-bottom:16px">Dados cadastrados pela coordenação. Para corrigir algo, fale com a coordenação.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div><div class="muted" style="font-size:12px">Nome</div><div style="font-weight:700">${escapeHtml(currentProfile.full_name)}</div></div>
+        <div><div class="muted" style="font-size:12px">E-mail</div><div style="font-weight:700">${escapeHtml(currentIntern.email)}</div></div>
+        <div><div class="muted" style="font-size:12px">Matrícula</div><div style="font-weight:700">${escapeHtml(currentIntern.registration_number)}</div></div>
+        <div><div class="muted" style="font-size:12px">WhatsApp</div><div style="font-weight:700">${waHtml}</div></div>
+        <div><div class="muted" style="font-size:12px">Semestre</div><div style="font-weight:700">${currentIntern.current_semester}º</div></div>
+        <div><div class="muted" style="font-size:12px">Status</div><div style="font-weight:700">${currentIntern.status === 'ativo' ? 'Ativo' : 'Inativo'}</div></div>
+        <div><div class="muted" style="font-size:12px">Abordagens</div><div style="font-weight:700">${escapeHtml(currentIntern.preferred_approaches || '—')}</div></div>
+        <div><div class="muted" style="font-size:12px">Público</div><div style="font-weight:700">${escapeHtml(currentIntern.preferred_audience || '—')}</div></div>
+      </div>
+    </section>`;
+}
+
+// ---------------------------------------------------------------------------
+// PÁGINA: RELATÓRIOS (individual e geral, exportação em PDF)
+// ---------------------------------------------------------------------------
+function exportReportPdf(title, bodyHtml) {
+  const win = window.open('', '_blank');
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
+    <style>
+      body{font-family:Arial,sans-serif;padding:32px;color:#172033}
+      h1{font-size:20px;margin-bottom:4px}
+      .meta{color:#667085;font-size:13px;margin-bottom:20px}
+      table{width:100%;border-collapse:collapse;margin-top:12px}
+      th,td{border:1px solid #ddd;padding:8px;font-size:13px;text-align:left}
+      th{background:#f5f7fb}
+      .totals td{font-weight:700;background:#fafbfc}
+    </style></head><body>
+    <h1>${title}</h1>${bodyHtml}
+    </body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 300);
+}
+
+async function computeInternMetrics(internId, startDate, endDate) {
+  const { data: appts } = await db.from('appointments').select('id, patient_id, status, attendance_status')
+    .eq('intern_id', internId).gte('appointment_date', startDate).lte('appointment_date', endDate);
+  const all = appts || [];
+  const ativos = all.filter(a => a.status === 'agendado');
+  const presentes = ativos.filter(a => a.attendance_status === 'presente').length;
+  const ausentes = ativos.filter(a => a.attendance_status === 'ausente').length;
+  const cancelados = all.filter(a => a.status === 'cancelado').length;
+  const pacientes = new Set(ativos.map(a => a.patient_id)).size;
+  return {
+    atendimentos: ativos.length, horasPrevistas: ativos.length, horasRealizadas: presentes,
+    pacientes, presentes, ausentes, cancelados
+  };
+}
+
+async function renderRelatorios() {
+  content.innerHTML = `
+    <section class="panel">
+      <div class="toolbar"><h2>Relatórios</h2></div>
+      <div style="display:flex;gap:6px;margin-bottom:18px">
+        <button class="action secondary report-tab" data-v="individual">Individual</button>
+        <button class="action secondary report-tab" data-v="geral">Geral</button>
+      </div>
+      <div id="reportFormWrap"></div>
+      <div id="reportResultWrap" style="margin-top:20px"></div>
+    </section>`;
+
+  let reportView = 'individual';
+
+  const { data: interns } = await db.from('interns').select('id');
+  const internIds = (interns || []).map(i => i.id);
+  const { data: profiles } = internIds.length ? await db.from('profiles').select('id, full_name').in('id', internIds) : { data: [] };
+  const nameById = {};
+  (profiles || []).forEach(p => { nameById[p.id] = p.full_name; });
+  const internsList = internIds.map(id => ({ id, full_name: nameById[id] || '(sem nome)' })).sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+  function defaultDates() {
+    const range = getDateRange('mes', new Date());
+    return { start: toDateStr(range.start), end: toDateStr(range.end) };
+  }
+
+  function renderForm() {
+    document.querySelectorAll('.report-tab').forEach(b => b.classList.toggle('active', b.dataset.v === reportView));
+    const d = defaultDates();
+    const formWrap = document.getElementById('reportFormWrap');
+
+    if (reportView === 'individual') {
+      formWrap.innerHTML = `
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+          <div class="field" style="margin-bottom:0"><label>Estagiário</label>
+            <select id="repIntern">${internsList.map(i => `<option value="${i.id}">${escapeHtml(i.full_name)}</option>`).join('')}</select>
+          </div>
+          <div class="field" style="margin-bottom:0"><label>De</label><input type="date" id="repStart" value="${d.start}"></div>
+          <div class="field" style="margin-bottom:0"><label>Até</label><input type="date" id="repEnd" value="${d.end}"></div>
+          <button id="genReportBtn" class="action">Gerar relatório</button>
+        </div>`;
+    } else {
+      formWrap.innerHTML = `
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+          <div class="field" style="margin-bottom:0"><label>De</label><input type="date" id="repStart" value="${d.start}"></div>
+          <div class="field" style="margin-bottom:0"><label>Até</label><input type="date" id="repEnd" value="${d.end}"></div>
+          <button id="genReportBtn" class="action">Gerar relatório</button>
+        </div>`;
+    }
+
+    document.getElementById('genReportBtn').addEventListener('click', reportView === 'individual' ? generateIndividual : generateGeral);
+    document.getElementById('reportResultWrap').innerHTML = '';
+  }
+
+  document.querySelectorAll('.report-tab').forEach(btn => {
+    btn.addEventListener('click', () => { reportView = btn.dataset.v; renderForm(); });
+  });
+
+  async function generateIndividual() {
+    const internId = document.getElementById('repIntern').value;
+    const start = document.getElementById('repStart').value;
+    const end = document.getElementById('repEnd').value;
+    const resultWrap = document.getElementById('reportResultWrap');
+    if (!internId || !start || !end || start > end) { resultWrap.innerHTML = `<div class="message error" style="display:block">Verifique o período.</div>`; return; }
+
+    resultWrap.innerHTML = `<div class="placeholder">Gerando...</div>`;
+    const internName = nameById[internId] || '?';
+    const m = await computeInternMetrics(internId, start, end);
+
+    const bodyHtml = `
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0">
+        ${statCard('Atendimentos', m.atendimentos)}
+        ${statCard('Horas previstas', m.horasPrevistas + 'h')}
+        ${statCard('Horas realizadas', m.horasRealizadas + 'h')}
+        ${statCard('Pacientes atendidos', m.pacientes)}
+        ${statCard('Presenças', m.presentes, '#2f855a')}
+        ${statCard('Ausências', m.ausentes, '#b42318')}
+      </div>
+      <div class="muted">Cancelamentos no período: <strong>${m.cancelados}</strong></div>`;
+
+    resultWrap.innerHTML = `<div style="margin-bottom:12px"><button id="exportPdfBtn" class="action">Exportar PDF</button></div>${bodyHtml}`;
+
+    document.getElementById('exportPdfBtn').addEventListener('click', () => {
+      const pdfBody = `
+        <div class="meta">${escapeHtml(internName)} · ${fmtBr(start)} a ${fmtBr(end)}</div>
+        <table>
+          <tr><th>Atendimentos</th><td>${m.atendimentos}</td></tr>
+          <tr><th>Horas previstas</th><td>${m.horasPrevistas}h</td></tr>
+          <tr><th>Horas realizadas</th><td>${m.horasRealizadas}h</td></tr>
+          <tr><th>Pacientes atendidos</th><td>${m.pacientes}</td></tr>
+          <tr><th>Presenças</th><td>${m.presentes}</td></tr>
+          <tr><th>Ausências</th><td>${m.ausentes}</td></tr>
+          <tr><th>Cancelamentos</th><td>${m.cancelados}</td></tr>
+        </table>`;
+      exportReportPdf(`Relatório individual — ${internName}`, pdfBody);
+    });
+  }
+
+  async function generateGeral() {
+    const start = document.getElementById('repStart').value;
+    const end = document.getElementById('repEnd').value;
+    const resultWrap = document.getElementById('reportResultWrap');
+    if (!start || !end || start > end) { resultWrap.innerHTML = `<div class="message error" style="display:block">Verifique o período.</div>`; return; }
+
+    resultWrap.innerHTML = `<div class="placeholder">Gerando...</div>`;
+    const metricsList = await Promise.all(internsList.map(async i => ({ ...i, m: await computeInternMetrics(i.id, start, end) })));
+
+    const totals = metricsList.reduce((acc, r) => ({
+      atendimentos: acc.atendimentos + r.m.atendimentos,
+      horasRealizadas: acc.horasRealizadas + r.m.horasRealizadas,
+      presentes: acc.presentes + r.m.presentes,
+      ausentes: acc.ausentes + r.m.ausentes,
+      cancelados: acc.cancelados + r.m.cancelados
+    }), { atendimentos: 0, horasRealizadas: 0, presentes: 0, ausentes: 0, cancelados: 0 });
+
+    const rowsHtml = metricsList.map(r => `<tr>
+      <td style="text-align:left">${escapeHtml(r.full_name)}</td>
+      <td>${r.m.atendimentos}</td><td>${r.m.horasRealizadas}h</td><td>${r.m.pacientes}</td>
+      <td>${r.m.presentes}</td><td>${r.m.ausentes}</td><td>${r.m.cancelados}</td>
+    </tr>`).join('');
+
+    const tableHtml = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+      <tr style="text-align:left;font-size:12px;color:#667085">
+        <th style="text-align:left">Estagiário</th><th>Atend.</th><th>Horas realiz.</th><th>Pacientes</th><th>Presenças</th><th>Ausências</th><th>Cancelamentos</th>
+      </tr>${rowsHtml}
+      <tr style="font-weight:700;background:#fafbfc">
+        <td style="text-align:left">Total</td><td>${totals.atendimentos}</td><td>${totals.horasRealizadas}h</td><td>—</td>
+        <td>${totals.presentes}</td><td>${totals.ausentes}</td><td>${totals.cancelados}</td>
+      </tr></table>`;
+
+    resultWrap.innerHTML = `<div style="margin-bottom:12px"><button id="exportPdfBtn" class="action">Exportar PDF</button></div>${tableHtml}`;
+
+    document.getElementById('exportPdfBtn').addEventListener('click', () => {
+      const pdfRows = metricsList.map(r => `<tr>
+        <td>${escapeHtml(r.full_name)}</td><td>${r.m.atendimentos}</td><td>${r.m.horasRealizadas}h</td>
+        <td>${r.m.pacientes}</td><td>${r.m.presentes}</td><td>${r.m.ausentes}</td><td>${r.m.cancelados}</td>
+      </tr>`).join('');
+      const pdfBody = `
+        <div class="meta">${fmtBr(start)} a ${fmtBr(end)}</div>
+        <table>
+          <tr><th>Estagiário</th><th>Atendimentos</th><th>Horas realizadas</th><th>Pacientes</th><th>Presenças</th><th>Ausências</th><th>Cancelamentos</th></tr>
+          ${pdfRows}
+          <tr class="totals"><td>Total</td><td>${totals.atendimentos}</td><td>${totals.horasRealizadas}h</td><td>—</td><td>${totals.presentes}</td><td>${totals.ausentes}</td><td>${totals.cancelados}</td></tr>
+        </table>`;
+      exportReportPdf('Relatório geral', pdfBody);
+    });
+  }
+
+  renderForm();
+}
+
+// ---------------------------------------------------------------------------
+// PÁGINA: ESTAGIÁRIOS
+// ---------------------------------------------------------------------------
+
+function whatsappLink(whatsapp) {
+  let digits = String(whatsapp || '').replace(/\D/g, '');
+  if (!digits) return null;
+  if (!digits.startsWith('55')) digits = '55' + digits;
+  return `https://wa.me/${digits}`;
+}
+
+// Cliente temporário, separado do cliente principal, usado apenas para criar
+// o login do estagiário sem afetar a sessão da coordenação que está logada.
+function createTempAuthClient() {
+  return createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+  });
+}
+
+async function renderEstagiarios() {
+  content.innerHTML = `
+    <section class="panel">
+      <div class="toolbar">
+        <div><h2>Período letivo</h2><div class="muted">Informe o início e o término do semestre atual. Ao passar da data final, os estagiários entram em "avanço pendente".</div></div>
+      </div>
+      <div id="periodMsg" class="message"></div>
+      <div id="currentPeriodWrap" class="muted" style="margin-bottom:12px">Carregando...</div>
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+        <div class="field" style="margin-bottom:0"><label>Início do semestre</label><input type="date" id="periodStart"></div>
+        <div class="field" style="margin-bottom:0"><label>Término do semestre</label><input type="date" id="periodEnd"></div>
+        <button id="savePeriodBtn" class="action">Salvar período</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div><h2>Estagiários</h2><div class="muted">Cadastro e login dos estagiários.</div></div>
+        <button id="newInternBtn" class="action">+ Novo estagiário</button>
+      </div>
+      <div id="internListWrap"><div class="placeholder">Carregando...</div></div>
+    </section>
+
+    <section id="internFormPanel" class="panel" style="display:none">
+      <div class="toolbar"><h2 id="internFormTitle">Novo estagiário</h2></div>
+      <div id="internFormMsg" class="message"></div>
+      <div class="field"><label>Nome completo *</label><input id="fName" placeholder="Nome completo"></div>
+      <div id="loginFields">
+        <div class="field"><label>E-mail de acesso *</label><input id="fEmail" type="email" placeholder="estagiario@email.com"></div>
+        <div class="field"><label>Senha de acesso *</label><input id="fPassword" type="text" placeholder="Mínimo 6 caracteres"></div>
+      </div>
+      <div id="resetPasswordField" style="display:none;margin-bottom:16px">
+        <button id="sendResetPasswordBtn" type="button" class="action secondary">Enviar link de redefinição de senha</button>
+        <div class="muted" style="font-size:12px;margin-top:6px">Envia um e-mail para o estagiário definir uma nova senha.</div>
+      </div>
+      <div class="field"><label>Matrícula *</label><input id="fRegistration" placeholder="Matrícula"></div>
+      <div class="field"><label>WhatsApp *</label><input id="fWhatsapp" placeholder="(85) 99999-9999"></div>
+      <div class="field"><label>Semestre *</label><input id="fSemester" type="number" min="1" max="20" placeholder="8"></div>
+      <div class="field"><label>Abordagens (opcional)</label><input id="fApproaches" placeholder="Ex.: TCC"></div>
+      <div class="field"><label>Público (opcional)</label><input id="fAudience" placeholder="Ex.: Adultos"></div>
+      <div class="field"><label>Status</label>
+        <select id="fStatus"><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:10px">
+        <button id="saveInternBtn" class="action">Salvar estagiário</button>
+        <button id="cancelInternBtn" class="action secondary">Cancelar</button>
+      </div>
+    </section>`;
+
+  // ---- Período letivo e avanço de semestre ----
+  const periodMsg = document.getElementById('periodMsg');
+  let latestPeriod = null;
+
+  async function loadPeriod() {
+    const { data } = await db.from('academic_periods').select('*').order('end_date', { ascending: false }).limit(1);
+    latestPeriod = (data && data[0]) || null;
+    document.getElementById('currentPeriodWrap').innerHTML = latestPeriod
+      ? `Período atual: <strong>${fmtBr(latestPeriod.start_date)} a ${fmtBr(latestPeriod.end_date)}</strong>`
+      : 'Nenhum período letivo cadastrado ainda.';
+  }
+
+  document.getElementById('savePeriodBtn').addEventListener('click', async () => {
+    const start = document.getElementById('periodStart').value;
+    const end = document.getElementById('periodEnd').value;
+    if (!start || !end || start > end) {
+      periodMsg.textContent = 'Informe datas válidas (início antes do término).';
+      periodMsg.className = 'message error'; periodMsg.style.display = 'block';
+      return;
+    }
+    const { error } = await db.from('academic_periods').insert([{ start_date: start, end_date: end }]);
+    if (error) {
+      periodMsg.textContent = 'Erro ao salvar: ' + error.message;
+      periodMsg.className = 'message error'; periodMsg.style.display = 'block';
+      return;
+    }
+    periodMsg.textContent = 'Período letivo salvo.';
+    periodMsg.className = 'message success'; periodMsg.style.display = 'block';
+    document.getElementById('periodStart').value = '';
+    document.getElementById('periodEnd').value = '';
+    await loadPeriod();
+    await checkSemesterAdvance();
+    await loadList();
+  });
+
+  async function checkSemesterAdvance() {
+    if (!latestPeriod) return;
+    const todayStr = toDateStr(new Date());
+    if (todayStr <= latestPeriod.end_date) return;
+
+    const { data: candidates } = await db.from('interns').select('id, last_advanced_period_id, pending_semester_advance')
+      .eq('status', 'ativo')
+      .or(`last_advanced_period_id.is.null,last_advanced_period_id.neq.${latestPeriod.id}`);
+
+    const toFlag = (candidates || []).filter(i => !i.pending_semester_advance).map(i => i.id);
+    if (toFlag.length > 0) {
+      await db.from('interns').update({ pending_semester_advance: true }).in('id', toFlag);
+    }
+  }
+
+  await loadPeriod();
+  await checkSemesterAdvance();
+
+  const wrap = document.getElementById('internListWrap');
+  const panel = document.getElementById('internFormPanel');
+  const formTitle = document.getElementById('internFormTitle');
+  const loginFields = document.getElementById('loginFields');
+  const msg = document.getElementById('internFormMsg');
+  let editingId = null;
+  let internsCache = [];
+
+  async function loadList() {
+    const { data: interns, error: internsErr } = await db.from('interns').select('*');
+    if (internsErr) {
+      wrap.innerHTML = `<div class="message error" style="display:block">Erro: ${escapeHtml(internsErr.message)}</div>`;
+      return;
+    }
+
+    const internIds = (interns || []).map(i => i.id);
+    const { data: profiles, error: profilesErr } = internIds.length
+      ? await db.from('profiles').select('id, full_name').in('id', internIds)
+      : { data: [], error: null };
+
+    if (profilesErr) {
+      wrap.innerHTML = `<div class="message error" style="display:block">Erro: ${escapeHtml(profilesErr.message)}</div>`;
+      return;
+    }
+
+    const nameById = {};
+    (profiles || []).forEach(p => { nameById[p.id] = p.full_name; });
+
+    internsCache = (interns || []).map(i => ({ ...i, full_name: nameById[i.id] || '(sem nome)' }))
+      .sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+    if (internsCache.length === 0) {
+      wrap.innerHTML = `<div class="placeholder">Nenhum estagiário cadastrado.</div>`;
+      return;
+    }
+
+    const rows = internsCache.map(i => {
+      const wa = whatsappLink(i.whatsapp);
+      const waHtml = wa ? `<a href="${wa}" target="_blank" rel="noopener">${escapeHtml(i.whatsapp)}</a>` : (escapeHtml(i.whatsapp) || '—');
+      const statusBadge = i.status === 'ativo'
+        ? `<span style="color:#2f855a;font-weight:700">Ativo</span>`
+        : `<span style="color:#b42318;font-weight:700">Inativo</span>`;
+      const semestreCell = i.pending_semester_advance
+        ? `${i.current_semester}º <button class="action secondary confirm-advance" data-id="${i.id}" data-current="${i.current_semester}" style="padding:3px 8px;font-size:11px;margin-left:6px;background:#fff4d6;color:#8a5b00;border-color:#f0d38a">⏫ Avançar p/ ${i.current_semester + 1}º</button>`
+        : `${i.current_semester}º`;
+      return `<tr>
+        <td><strong>${escapeHtml(i.full_name)}</strong><br><small class="muted">${escapeHtml(i.email)}</small></td>
+        <td>${escapeHtml(i.registration_number)}</td>
+        <td>${waHtml}</td>
+        <td>${semestreCell}</td>
+        <td>${statusBadge}</td>
+        <td>
+          <button class="action secondary edit-intern" data-id="${i.id}" style="padding:6px 10px">Editar</button>
+          ${i.status === 'inativo' ? `<button class="action secondary delete-intern" data-id="${i.id}" style="padding:6px 10px;color:#b42318">Excluir</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `<div style="overflow:auto"><table style="width:100%;border-collapse:collapse">
+      <tr style="text-align:left;font-size:12px;color:#667085">
+        <th style="padding:10px 8px">Nome / E-mail</th><th>Matrícula</th><th>WhatsApp</th><th>Semestre</th><th>Status</th><th>Ações</th>
+      </tr>${rows}</table></div>`;
+
+    wrap.querySelectorAll('.edit-intern').forEach(btn => {
+      btn.addEventListener('click', () => openForm(internsCache.find(i => i.id === btn.dataset.id)));
+    });
+
+    wrap.querySelectorAll('.confirm-advance').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const nextSemester = parseInt(btn.dataset.current) + 1;
+        const { error } = await db.from('interns').update({
+          current_semester: nextSemester,
+          pending_semester_advance: false,
+          last_advanced_period_id: latestPeriod ? latestPeriod.id : null
+        }).eq('id', btn.dataset.id);
+        if (error) alert('Erro ao avançar semestre: ' + error.message); else loadList();
+      });
+    });
+
+    wrap.querySelectorAll('.delete-intern').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const { count } = await db.from('appointments').select('id', { count: 'exact', head: true }).eq('intern_id', btn.dataset.id);
+        if (count && count > 0) {
+          alert('Não é possível excluir: este estagiário já teve atendimentos registrados. Mantenha-o inativo para preservar o histórico.');
+          return;
+        }
+        if (!confirm('Excluir este estagiário definitivamente? O login dele deixará de funcionar, mas a conta em si precisa ser removida manualmente no painel do Supabase (Authentication → Users). Deseja continuar?')) return;
+        await db.from('intern_availability').delete().eq('intern_id', btn.dataset.id);
+        const { error: internErr } = await db.from('interns').delete().eq('id', btn.dataset.id);
+        if (internErr) { alert('Erro ao excluir: ' + internErr.message); return; }
+        await db.from('profiles').delete().eq('id', btn.dataset.id);
+        loadList();
+      });
+    });
+  }
+
+  function resetForm() {
+    editingId = null;
+    formTitle.textContent = 'Novo estagiário';
+    loginFields.style.display = 'block';
+    document.getElementById('resetPasswordField').style.display = 'none';
+    msg.style.display = 'none';
+    document.getElementById('fName').value = '';
+    document.getElementById('fEmail').value = '';
+    document.getElementById('fPassword').value = '';
+    document.getElementById('fRegistration').value = '';
+    document.getElementById('fWhatsapp').value = '';
+    document.getElementById('fSemester').value = '';
+    document.getElementById('fApproaches').value = '';
+    document.getElementById('fAudience').value = '';
+    document.getElementById('fStatus').value = 'ativo';
+  }
+
+  function openForm(intern) {
+    resetForm();
+    if (intern) {
+      editingId = intern.id;
+      formTitle.textContent = 'Editar estagiário';
+      loginFields.style.display = 'none'; // login não é editado aqui
+      document.getElementById('resetPasswordField').style.display = 'block';
+      document.getElementById('sendResetPasswordBtn').dataset.email = intern.email;
+      document.getElementById('fName').value = intern.full_name;
+      document.getElementById('fRegistration').value = intern.registration_number || '';
+      document.getElementById('fWhatsapp').value = intern.whatsapp || '';
+      document.getElementById('fSemester').value = intern.current_semester || '';
+      document.getElementById('fApproaches').value = intern.preferred_approaches || '';
+      document.getElementById('fAudience').value = intern.preferred_audience || '';
+      document.getElementById('fStatus').value = intern.status || 'ativo';
+    }
+    panel.style.display = 'block';
+    panel.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  document.getElementById('newInternBtn').addEventListener('click', () => openForm(null));
+  document.getElementById('cancelInternBtn').addEventListener('click', () => { panel.style.display = 'none'; });
+
+  document.getElementById('sendResetPasswordBtn').addEventListener('click', async () => {
+    const email = document.getElementById('sendResetPasswordBtn').dataset.email;
+    if (!email) return;
+    const btn = document.getElementById('sendResetPasswordBtn');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+    const { error } = await db.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    btn.disabled = false; btn.textContent = 'Enviar link de redefinição de senha';
+    if (error) {
+      msg.textContent = 'Erro ao enviar: ' + error.message;
+      msg.className = 'message error'; msg.style.display = 'block';
+    } else {
+      msg.textContent = `Link de redefinição enviado para ${email}.`;
+      msg.className = 'message success'; msg.style.display = 'block';
+    }
+  });
+
+  document.getElementById('saveInternBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('saveInternBtn');
+    msg.style.display = 'none';
+
+    const fullName = document.getElementById('fName').value.trim();
+    const registration = document.getElementById('fRegistration').value.trim();
+    const whatsapp = document.getElementById('fWhatsapp').value.trim();
+    const semester = parseInt(document.getElementById('fSemester').value);
+    const approaches = document.getElementById('fApproaches').value.trim() || null;
+    const audience = document.getElementById('fAudience').value.trim() || null;
+    const status = document.getElementById('fStatus').value;
+
+    if (!fullName || !registration || !whatsapp || !semester) {
+      msg.textContent = 'Preencha todos os campos obrigatórios.';
+      msg.className = 'message error'; msg.style.display = 'block';
+      return;
+    }
+
+    btn.disabled = true; btn.textContent = 'Salvando...';
+
+    if (editingId) {
+      // Edição: não mexe em login/e-mail, só nos dados cadastrais
+      const { error: profileErr } = await db.from('profiles').update({ full_name: fullName }).eq('id', editingId);
+      const { error: internErr } = await db.from('interns').update({
+        registration_number: registration, whatsapp, current_semester: semester,
+        preferred_approaches: approaches, preferred_audience: audience, status
+      }).eq('id', editingId);
+
+      if (profileErr || internErr) {
+        msg.textContent = 'Erro ao salvar: ' + (profileErr || internErr).message;
+        msg.className = 'message error'; msg.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Salvar estagiário';
+        return;
+      }
+    } else {
+      // Criação: precisa de e-mail e senha para gerar o login
+      const email = document.getElementById('fEmail').value.trim();
+      const password = document.getElementById('fPassword').value;
+
+      if (!email || !password || password.length < 6) {
+        msg.textContent = 'Informe e-mail e uma senha com no mínimo 6 caracteres.';
+        msg.className = 'message error'; msg.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Salvar estagiário';
+        return;
+      }
+
+      const tempClient = createTempAuthClient();
+      const { data: signUpData, error: signUpError } = await tempClient.auth.signUp({ email, password });
+
+      if (signUpError || !signUpData.user) {
+        msg.textContent = 'Erro ao criar login: ' + (signUpError ? signUpError.message : 'usuário não criado.');
+        msg.className = 'message error'; msg.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Salvar estagiário';
+        return;
+      }
+
+      const newId = signUpData.user.id;
+
+      const { error: profileErr } = await db.from('profiles').insert([{ id: newId, full_name: fullName, role: 'estagiario' }]);
+      if (profileErr) {
+        msg.textContent = 'Erro ao salvar perfil: ' + profileErr.message;
+        msg.className = 'message error'; msg.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Salvar estagiário';
+        return;
+      }
+
+      const { error: internErr } = await db.from('interns').insert([{
+        id: newId, registration_number: registration, whatsapp, current_semester: semester,
+        preferred_approaches: approaches, preferred_audience: audience, email, status
+      }]);
+      if (internErr) {
+        msg.textContent = 'Erro ao salvar dados do estagiário: ' + internErr.message;
+        msg.className = 'message error'; msg.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Salvar estagiário';
+        return;
+      }
+    }
+
+    panel.style.display = 'none';
+    await loadList();
+    btn.disabled = false; btn.textContent = 'Salvar estagiário';
+  });
+
+  await loadList();
+}
+
+// ---------------------------------------------------------------------------
+// GRADE DE DISPONIBILIDADE (reutilizável: pacientes, estagiários)
+// ---------------------------------------------------------------------------
+function buildAvailabilityGrid(clinicSlots, selectedSlots) {
+  const enabledSlots = (clinicSlots || []).filter(s => s.enabled);
+  if (enabledSlots.length === 0) {
+    return `<div class="placeholder">Nenhum horário liberado pela clínica ainda. Configure em "Horários".</div>`;
+  }
+
+  const times = [...new Set(enabledSlots.map(s => s.start_time.slice(0, 5)))].sort();
+
+  let html = `<div class="schedule-grid"><div class="schedule-head">Horário</div>` +
+    WEEKDAYS.map(d => `<div class="schedule-head">${d.l}</div>`).join('');
+
+  times.forEach(time => {
+    const hour = parseInt(time.split(':')[0]);
+    const endHour = String(hour + 1).padStart(2, '0') + 'h';
+    html += `<div><strong>${time.slice(0, 2)}h – ${endHour}</strong></div>`;
+    WEEKDAYS.forEach(d => {
+      const slot = enabledSlots.find(s => s.weekday === d.n && s.start_time.slice(0, 5) === time);
+      if (!slot) { html += `<div style="color:#d0d5dd;font-size:11px">Fechado</div>`; return; }
+      const isSelected = (selectedSlots || []).some(s => s.weekday === d.n && s.start_time.slice(0, 5) === time);
+      const cls = isSelected ? 'slot-open' : 'slot-closed';
+      const label = isSelected ? '✓ Disponível' : 'Livre';
+      html += `<div><button type="button" class="slot-btn avail-toggle ${cls}"
+        data-weekday="${d.n}" data-start="${slot.start_time}" data-end="${slot.end_time}">${label}</button></div>`;
+    });
+  });
+
+  html += `</div>`;
+  return html;
+}
+
+function bindAvailabilityToggles(container) {
+  container.querySelectorAll('.avail-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const open = btn.classList.contains('slot-open');
+      btn.classList.toggle('slot-open', !open);
+      btn.classList.toggle('slot-closed', open);
+      btn.textContent = open ? 'Livre' : '✓ Disponível';
+    });
+  });
+}
+
+function readSelectedSlots(container) {
+  return Array.from(container.querySelectorAll('.avail-toggle.slot-open')).map(b => ({
+    weekday: parseInt(b.dataset.weekday), start_time: b.dataset.start, end_time: b.dataset.end
+  }));
+}
+
+function formatAvailabilityBadges(slots) {
+  if (!slots || slots.length === 0) return `<span class="muted">Sem restrição</span>`;
+  const byDay = {};
+  slots.forEach(s => {
+    if (!byDay[s.weekday]) byDay[s.weekday] = [];
+    byDay[s.weekday].push(s.start_time.slice(0, 5));
+  });
+  return `<div style="display:flex;gap:4px">` + WEEKDAYS.map(d => {
+    const hours = byDay[d.n];
+    const has = !!hours;
+    const bg = has ? '#e9f7ef' : '#f3f4f6';
+    const fg = has ? '#176b36' : '#c3c9d3';
+    const title = has ? hours.sort().join(', ') : 'Sem disponibilidade';
+    return `<span title="${escapeHtml(title)}" style="width:28px;height:22px;border-radius:6px;background:${bg};color:${fg};
+      font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">${d.l.slice(0, 3)}</span>`;
+  }).join('') + `</div>`;
+}
+
+const CANCELLATION_REASON_LABELS = {
+  paciente_nao_respondeu: 'Paciente não respondeu',
+  paciente_nao_podera_comparecer: 'Paciente não poderá comparecer',
+  estagiario_nao_confirmou: 'Estagiário não confirmou',
+  estagiario_nao_podera_comparecer: 'Estagiário não poderá comparecer'
+};
+
+function daysSince(dateStr) {
+  const then = new Date(dateStr);
+  const now = new Date();
+  return Math.max(0, Math.floor((now - then) / (1000 * 60 * 60 * 24)));
+}
+
+// ---------------------------------------------------------------------------
+// PÁGINA: PACIENTES
+// ---------------------------------------------------------------------------
+const GENDER_OPTIONS = [
+  'Mulher cisgênero', 'Homem cisgênero', 'Mulher transgênero', 'Homem transgênero',
+  'Pessoa não binária', 'Outra identidade', 'Prefiro não informar'
+];
+
+async function renderPacientes() {
+  content.innerHTML = `
+    <section class="panel">
+      <div class="toolbar">
+        <div><h2>Pacientes</h2><div class="muted">Cadastro, disponibilidade e situação dos pacientes.</div></div>
+        <button id="newPatientBtn" class="action">+ Novo paciente</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:14px">
+        <button class="action secondary situation-filter" data-v="ativos">Ativos</button>
+        <button class="action secondary situation-filter" data-v="agendado">Agendados</button>
+        <button class="action secondary situation-filter" data-v="espera">Na espera</button>
+        <button class="action secondary situation-filter" data-v="inativos">Inativos</button>
+      </div>
+      <div id="patientListWrap"><div class="placeholder">Carregando...</div></div>
+    </section>
+
+    <section id="patientFormPanel" class="panel" style="display:none">
+      <div class="toolbar"><h2 id="patientFormTitle">Novo paciente</h2></div>
+      <div id="patientFormMsg" class="message"></div>
+      <div class="field"><label>Número de inscrição *</label><input id="pReg" placeholder="Ex.: 00342"></div>
+      <div class="field"><label>Nome (opcional)</label><input id="pName" placeholder="Nome completo"></div>
+      <div class="field"><label>Idade (opcional)</label><input id="pAge" type="number" min="0"></div>
+      <div class="field"><label>Gênero (opcional)</label>
+        <select id="pGender">
+          <option value="">Não informado</option>
+          ${GENDER_OPTIONS.map(g => `<option value="${g}">${g}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label>Status</label>
+        <select id="pStatus"><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select>
+      </div>
+
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e5e9ef">
+        <div style="font-weight:700;margin-bottom:4px">Disponibilidade semanal (opcional)</div>
+        <div class="muted" style="margin-bottom:12px">Marque os horários em que o paciente pode comparecer. Se nenhum horário for marcado, o paciente é considerado disponível em qualquer horário liberado.</div>
+        <div id="patientAvailGrid"><div class="placeholder">Carregando grade...</div></div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:20px">
+        <button id="savePatientBtn" class="action">Salvar paciente</button>
+        <button id="cancelPatientBtn" class="action secondary">Cancelar</button>
+      </div>
+    </section>`;
+
+  const wrap = document.getElementById('patientListWrap');
+  const panel = document.getElementById('patientFormPanel');
+  const formTitle = document.getElementById('patientFormTitle');
+  const msg = document.getElementById('patientFormMsg');
+  const availGridEl = document.getElementById('patientAvailGrid');
+  let editingId = null;
+  let originalStatus = null;
+  let patientsCache = [];
+  let clinicSlotsCache = [];
+
+  const { data: clinicSlots } = await db.from('clinic_schedule_slots').select('*').eq('enabled', true);
+  clinicSlotsCache = clinicSlots || [];
+
+  let situationFilter = 'ativos';
+
+  async function loadList() {
+    const { data, error } = await db.from('patients').select('*').order('created_at', { ascending: false });
+    if (error) {
+      wrap.innerHTML = `<div class="message error" style="display:block">Erro: ${escapeHtml(error.message)}</div>`;
+      return;
+    }
+    patientsCache = data || [];
+
+    if (patientsCache.length === 0) {
+      wrap.innerHTML = `<div class="placeholder">Nenhum paciente cadastrado.</div>`;
+      return;
+    }
+
+    const patientIds = patientsCache.map(p => p.id);
+    const [{ data: allAvail }, { data: activeSeries }] = await Promise.all([
+      db.from('patient_availability').select('patient_id, weekday, start_time'),
+      db.from('appointment_series').select('patient_id').in('patient_id', patientIds).eq('status', 'ativa')
+    ]);
+
+    const availByPatient = {};
+    (allAvail || []).forEach(a => {
+      if (!availByPatient[a.patient_id]) availByPatient[a.patient_id] = [];
+      availByPatient[a.patient_id].push(a);
+    });
+
+    const scheduledSet = new Set((activeSeries || []).map(s => s.patient_id));
+
+    const filtered = patientsCache.filter(p => {
+      if (situationFilter === 'inativos') return p.status === 'inativo';
+      if (p.status === 'inativo') return false; // inativos nunca entram nas outras abas
+      if (situationFilter === 'agendado') return scheduledSet.has(p.id);
+      if (situationFilter === 'espera') return !scheduledSet.has(p.id);
+      return true; // ativos
+    });
+
+    if (filtered.length === 0) {
+      wrap.innerHTML = `<div class="placeholder">Nenhum paciente nesta situação.</div>`;
+      return;
+    }
+
+    const rows = filtered.map(p => {
+      const statusBadge = p.status === 'ativo'
+        ? `<span style="color:#2f855a;font-weight:700">Ativo</span>`
+        : `<span style="color:#b42318;font-weight:700">Inativo</span>`;
+      const situacao = p.status === 'inativo'
+        ? `<span class="muted">Fora da clínica</span>`
+        : scheduledSet.has(p.id)
+          ? `<span style="color:#2f855a;font-weight:700">Agendado</span>`
+          : `<span style="color:#9a6700;font-weight:700">Na espera há ${daysSince(p.created_at)} dia(s)</span>`;
+      return `<tr>
+        <td><strong>${escapeHtml(p.registration_number)}</strong></td>
+        <td>${escapeHtml(p.full_name || '—')}</td>
+        <td>${p.age ?? '—'}</td>
+        <td>${escapeHtml(p.gender || '—')}</td>
+        <td>${formatAvailabilityBadges(availByPatient[p.id])}</td>
+        <td>${situacao}</td>
+        <td>${statusBadge}</td>
+        <td>
+          <button class="action secondary edit-patient" data-id="${p.id}" style="padding:6px 10px">Editar</button>
+          <button class="action secondary view-ficha" data-id="${p.id}" style="padding:6px 10px">Ficha</button>
+          ${p.status === 'inativo' ? `<button class="action secondary delete-patient" data-id="${p.id}" style="padding:6px 10px;color:#b42318">Excluir</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `<div style="overflow:auto;font-size:13px"><table style="width:100%;border-collapse:collapse;font-size:13px">
+      <tr style="text-align:left;font-size:12px;color:#667085">
+        <th style="padding:10px 8px">Inscrição</th><th>Nome</th><th>Idade</th><th>Gênero</th><th>Disponibilidade</th><th>Situação</th><th>Status</th><th>Ações</th>
+      </tr>${rows}</table></div>`;
+
+    wrap.querySelectorAll('.edit-patient').forEach(btn => {
+      btn.addEventListener('click', () => openForm(patientsCache.find(p => p.id === btn.dataset.id)));
+    });
+    wrap.querySelectorAll('.view-ficha').forEach(btn => {
+      btn.addEventListener('click', () => renderPatientFicha(btn.dataset.id, 'pacientes'));
+    });
+    wrap.querySelectorAll('.delete-patient').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const { count } = await db.from('appointments').select('id', { count: 'exact', head: true }).eq('patient_id', btn.dataset.id);
+        if (count && count > 0) {
+          alert('Não é possível excluir: este paciente já teve atendimentos registrados. Mantenha-o inativo para preservar o histórico.');
+          return;
+        }
+        if (!confirm('Excluir este paciente definitivamente? Esta ação não pode ser desfeita.')) return;
+        await db.from('patient_availability').delete().eq('patient_id', btn.dataset.id);
+        const { error } = await db.from('patients').delete().eq('id', btn.dataset.id);
+        if (error) alert('Erro ao excluir: ' + error.message); else loadList();
+      });
+    });
+  }
+
+  document.querySelectorAll('.situation-filter').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.v === situationFilter);
+    btn.addEventListener('click', () => {
+      situationFilter = btn.dataset.v;
+      document.querySelectorAll('.situation-filter').forEach(b => b.classList.toggle('active', b.dataset.v === situationFilter));
+      loadList();
+    });
+  });
+
+  function resetForm() {
+    editingId = null;
+    originalStatus = null;
+    formTitle.textContent = 'Novo paciente';
+    msg.style.display = 'none';
+    document.getElementById('pReg').value = '';
+    document.getElementById('pName').value = '';
+    document.getElementById('pAge').value = '';
+    document.getElementById('pGender').value = '';
+    document.getElementById('pStatus').value = 'ativo';
+    availGridEl.innerHTML = buildAvailabilityGrid(clinicSlotsCache, []);
+    bindAvailabilityToggles(availGridEl);
+  }
+
+  async function openForm(patient) {
+    resetForm();
+    if (patient) {
+      editingId = patient.id;
+      originalStatus = patient.status;
+      formTitle.textContent = 'Editar paciente';
+      document.getElementById('pReg').value = patient.registration_number || '';
+      document.getElementById('pName').value = patient.full_name || '';
+      document.getElementById('pAge').value = patient.age ?? '';
+      document.getElementById('pGender').value = patient.gender || '';
+      document.getElementById('pStatus').value = patient.status || 'ativo';
+
+      const { data: pAvail } = await db.from('patient_availability').select('*').eq('patient_id', patient.id);
+      availGridEl.innerHTML = buildAvailabilityGrid(clinicSlotsCache, pAvail || []);
+      bindAvailabilityToggles(availGridEl);
+    }
+    panel.style.display = 'block';
+    panel.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  document.getElementById('newPatientBtn').addEventListener('click', () => openForm(null));
+  document.getElementById('cancelPatientBtn').addEventListener('click', () => { panel.style.display = 'none'; });
+
+  document.getElementById('savePatientBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('savePatientBtn');
+    msg.style.display = 'none';
+
+    const registration = document.getElementById('pReg').value.trim();
+    const fullName = document.getElementById('pName').value.trim() || null;
+    const ageVal = document.getElementById('pAge').value;
+    const age = ageVal ? parseInt(ageVal) : null;
+    const gender = document.getElementById('pGender').value || null;
+    const status = document.getElementById('pStatus').value;
+
+    if (!registration) {
+      msg.textContent = 'O número de inscrição é obrigatório.';
+      msg.className = 'message error'; msg.style.display = 'block';
+      return;
+    }
+
+    btn.disabled = true; btn.textContent = 'Salvando...';
+
+    const payload = { registration_number: registration, full_name: fullName, age, gender, status };
+
+    const result = editingId
+      ? await db.from('patients').update(payload).eq('id', editingId).select().single()
+      : await db.from('patients').insert([payload]).select().single();
+
+    if (result.error) {
+      msg.textContent = 'Erro ao salvar: ' + result.error.message;
+      msg.className = 'message error'; msg.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Salvar paciente';
+      return;
+    }
+
+    const savedId = result.data.id;
+    const selectedSlots = readSelectedSlots(availGridEl).map(s => ({ ...s, patient_id: savedId }));
+
+    await db.from('patient_availability').delete().eq('patient_id', savedId);
+    if (selectedSlots.length > 0) await db.from('patient_availability').insert(selectedSlots);
+
+    // Se o paciente acabou de ser inativado, oferece cancelar os atendimentos futuros
+    if (editingId && originalStatus === 'ativo' && status === 'inativo') {
+      const confirmCancel = confirm('Este paciente foi marcado como inativo. Deseja cancelar todos os atendimentos futuros dele agora?');
+      if (confirmCancel) {
+        const { error: rpcError } = await db.rpc('cancelar_atendimentos_futuros_paciente', { p_patient_id: savedId });
+        if (rpcError) alert('Erro ao cancelar atendimentos futuros: ' + rpcError.message);
+      }
+    }
+
+    panel.style.display = 'none';
+    await loadList();
+    btn.disabled = false; btn.textContent = 'Salvar paciente';
+  });
+
+  resetForm();
+  await loadList();
+}
+
+// ---------------------------------------------------------------------------
+// FICHA DO PACIENTE (histórico completo)
+// ---------------------------------------------------------------------------
+async function renderPatientFicha(patientId, returnPage = 'pacientes') {
+  content.innerHTML = `<div class="placeholder">Carregando ficha...</div>`;
+
+  const { data: patient, error: patErr } = await db.from('patients').select('*').eq('id', patientId).single();
+  if (patErr) { content.innerHTML = `<div class="message error" style="display:block">Erro: ${escapeHtml(patErr.message)}</div>`; return; }
+
+  const { data: appts } = await db.from('appointments')
+    .select('*').eq('patient_id', patientId).order('appointment_date', { ascending: false });
+
+  const internIds = [...new Set((appts || []).map(a => a.intern_id))];
+  const { data: profiles } = internIds.length
+    ? await db.from('profiles').select('id, full_name').in('id', internIds)
+    : { data: [] };
+  const nameById = {};
+  (profiles || []).forEach(p => { nameById[p.id] = p.full_name; });
+
+  const all = appts || [];
+  const totalAgendado = all.filter(a => a.status === 'agendado').length;
+  const presentes = all.filter(a => a.attendance_status === 'presente').length;
+  const ausentes = all.filter(a => a.attendance_status === 'ausente').length;
+  const cancelados = all.filter(a => a.status === 'cancelado').length;
+
+  const rows = all.map(a => {
+    const isCancelled = a.status === 'cancelado';
+    const attLabel = { pendente: 'Pendente', presente: 'Presente', ausente: 'Ausente', cancelado: 'Cancelado' }[a.attendance_status];
+    const reason = a.cancellation_reason ? CANCELLATION_REASON_LABELS[a.cancellation_reason] || a.cancellation_reason : '';
+    return `<tr style="${isCancelled ? 'opacity:.6' : ''}">
+      <td style="padding:6px 8px">${fmtBr(a.appointment_date)}</td>
+      <td>${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}</td>
+      <td>${escapeHtml(nameById[a.intern_id] || '?')}</td>
+      <td>${isCancelled ? '<span style="color:#b42318;font-weight:700">Cancelado</span>' : attLabel}</td>
+      <td style="font-size:12px">${isCancelled ? `${a.cancelled_by || ''}${reason ? ' — ' + reason : ''}` : ''}</td>
+    </tr>`;
+  }).join('');
+
+  content.innerHTML = `
+    <section class="panel">
+      <button id="backFromFicha" class="action secondary" style="margin-bottom:14px">← Voltar</button>
+      <h2 style="margin-top:0">Ficha do paciente #${escapeHtml(patient.registration_number)}</h2>
+      <div class="muted" style="margin-bottom:16px">${escapeHtml(patient.full_name || 'Nome não informado')} ${patient.age ? '· ' + patient.age + ' anos' : ''} ${patient.gender ? '· ' + escapeHtml(patient.gender) : ''}</div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+        <div class="panel" style="margin-bottom:0;padding:14px"><div class="muted" style="font-size:12px">Agendados (futuros)</div><strong style="font-size:22px">${totalAgendado}</strong></div>
+        <div class="panel" style="margin-bottom:0;padding:14px"><div class="muted" style="font-size:12px">Presenças</div><strong style="font-size:22px;color:#2f855a">${presentes}</strong></div>
+        <div class="panel" style="margin-bottom:0;padding:14px"><div class="muted" style="font-size:12px">Faltas</div><strong style="font-size:22px;color:#b42318">${ausentes}</strong></div>
+        <div class="panel" style="margin-bottom:0;padding:14px"><div class="muted" style="font-size:12px">Cancelados</div><strong style="font-size:22px;color:#9a6700">${cancelados}</strong></div>
+      </div>
+
+      ${all.length === 0 ? '<div class="placeholder">Nenhum atendimento registrado para este paciente ainda.</div>' : `
+      <div style="overflow:auto">
+        <table style="width:100%;border-collapse:collapse">
+          <tr style="text-align:left;font-size:12px;color:#667085">
+            <th style="padding:6px 8px">Data</th><th>Horário</th><th>Estagiário</th><th>Situação</th><th>Detalhe do cancelamento</th>
+          </tr>${rows}
+        </table>
+      </div>`}
+    </section>`;
+
+  document.getElementById('backFromFicha').addEventListener('click', () => { currentPage = returnPage; render(); });
+}
+
+// ---------------------------------------------------------------------------
+// PÁGINA: MINHA AGENDA (estagiário) — confirmação e registro de presença
+// ---------------------------------------------------------------------------
+let internAgendaView = 'semana';
+let internAgendaAnchor = new Date();
+
+async function renderMinhaAgenda() {
+  if (!currentIntern) {
+    content.innerHTML = `<section class="panel"><div class="placeholder">Você não possui um cadastro de estagiário vinculado a este login.</div></section>`;
+    return;
+  }
+
+  content.innerHTML = `
+    <div id="inicioCards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px">
+      <div class="placeholder">Carregando...</div>
+    </div>
+    <section class="panel"><h2>Ações necessárias</h2><div id="acoesWrap" class="placeholder">Carregando...</div></section>
+
+    <section class="panel">
+      <div class="toolbar"><div><h2>Minha agenda</h2><div class="muted">Confirme seus atendimentos e registre a presença após o horário.</div></div></div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px">
+        <div style="display:flex;gap:4px">
+          <button class="action secondary iview-btn" data-v="dia">Dia</button>
+          <button class="action secondary iview-btn" data-v="semana">Semana</button>
+          <button class="action secondary iview-btn" data-v="mes">Mês</button>
+        </div>
+        <button id="iPrevPeriod" class="action secondary">◀</button>
+        <div id="iPeriodLabel" style="font-weight:700;min-width:160px;text-align:center"></div>
+        <button id="iNextPeriod" class="action secondary">▶</button>
+        <button id="iTodayBtn" class="action secondary">Hoje</button>
+      </div>
+
+      <div id="myAgendaListWrap"><div class="placeholder">Carregando...</div></div>
+    </section>`;
+
+  await loadInternStatsAndActions();
+
+  const listWrap = document.getElementById('myAgendaListWrap');
+
+  document.querySelectorAll('.iview-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.v === internAgendaView);
+    btn.addEventListener('click', () => {
+      internAgendaView = btn.dataset.v;
+      document.querySelectorAll('.iview-btn').forEach(b => b.classList.toggle('active', b.dataset.v === internAgendaView));
+      loadMyAppointments();
+    });
+  });
+
+  document.getElementById('iPrevPeriod').addEventListener('click', () => { shiftInternAnchor(-1); loadMyAppointments(); });
+  document.getElementById('iNextPeriod').addEventListener('click', () => { shiftInternAnchor(1); loadMyAppointments(); });
+  document.getElementById('iTodayBtn').addEventListener('click', () => { internAgendaAnchor = new Date(); loadMyAppointments(); });
+
+  function shiftInternAnchor(dir) {
+    const a = new Date(internAgendaAnchor);
+    if (internAgendaView === 'dia') a.setDate(a.getDate() + dir);
+    else if (internAgendaView === 'semana') a.setDate(a.getDate() + dir * 7);
+    else a.setMonth(a.getMonth() + dir);
+    internAgendaAnchor = a;
+  }
+
+  async function loadMyAppointments() {
+    const range = getDateRange(internAgendaView, internAgendaAnchor);
+    document.getElementById('iPeriodLabel').textContent = periodLabel(internAgendaView, range);
+
+    const { data: appts, error } = await db.from('appointments')
+      .select('id, appointment_date, start_time, end_time, status, intern_confirmation, patient_confirmation, attendance_status, patient_id, patients(registration_number, full_name)')
+      .eq('intern_id', currentIntern.id)
+      .gte('appointment_date', toDateStr(range.start))
+      .lte('appointment_date', toDateStr(range.end))
+      .order('appointment_date').order('start_time');
+
+    if (error) { listWrap.innerHTML = `<div class="message error" style="display:block">Erro: ${escapeHtml(error.message)}</div>`; return; }
+    if (!appts || appts.length === 0) { listWrap.innerHTML = `<div class="placeholder">Nenhum atendimento neste período.</div>`; return; }
+
+    const todayStr = toDateStr(new Date());
+    const byDate = {};
+    appts.forEach(a => { (byDate[a.appointment_date] = byDate[a.appointment_date] || []).push(a); });
+
+    let html = '';
+    Object.keys(byDate).sort().forEach(date => {
+      const d = new Date(date + 'T00:00:00');
+      const weekdayLabel = d.toLocaleDateString('pt-BR', { weekday: 'long' });
+      html += `<div style="margin:16px 0 6px;font-weight:700;text-transform:capitalize">${weekdayLabel}, ${fmtBr(date)}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="text-align:left;font-size:12px;color:#667085">
+          <th style="padding:6px 8px">Horário</th><th style="text-align:left">Paciente</th><th>Minha confirmação</th><th>Presença do paciente</th><th>Ficha</th>
+        </tr>`;
+
+      byDate[date].forEach(a => {
+        const patLabel = a.patients ? `#${a.patients.registration_number} ${a.patients.full_name || ''}` : '—';
+        const isCancelled = a.status === 'cancelado';
+        const isPast = date <= todayStr;
+
+        const pc = a.patient_confirmation;
+        const pcColor = pc === 'confirmado' ? '#2f855a' : pc === 'nao_confirmado' ? '#b42318' : '#9a6700';
+        const pcLabel = { aguardando: 'Aguardando', confirmado: 'Confirmado', nao_confirmado: 'Não confirmado' }[pc];
+        const patCell = `${escapeHtml(patLabel)}${isCancelled ? '' : `<br><span style="font-size:11px;color:${pcColor}">Paciente: ${pcLabel}</span>`}`;
+
+        let confCell, presCell;
+
+        if (isCancelled) {
+          confCell = `<span style="color:#b42318;font-weight:700">Cancelado</span>`;
+          presCell = '—';
+        } else {
+          // Confirmação: editável antes do dia do atendimento; só leitura depois
+          const conf = a.intern_confirmation;
+          const confColor = conf === 'confirmado' ? '#176b36' : conf === 'nao_confirmado' ? '#b42318' : '#475467';
+          const confLabelRead = { aguardando: 'Aguardando', confirmado: '✓ Confirmado', nao_confirmado: '✗ Não confirmado' }[conf];
+          if (!isPast) {
+            let style, label;
+            if (conf === 'confirmado') { style = 'background:#e9f7ef;color:#176b36;border:1px solid #bce3cc'; label = '✓ Confirmado'; }
+            else if (conf === 'nao_confirmado') { style = 'background:#fdecec;color:#b42318;border:1px solid #f3c6c6'; label = '✗ Não poderei comparecer'; }
+            else { style = 'background:#f3f4f6;color:#475467;border:1px solid #e5e7eb'; label = 'Confirmar atendimento'; }
+            confCell = `<button class="toggle-confirm" data-id="${a.id}" data-current="${conf}"
+              style="${style};font-weight:700;padding:7px 12px;border-radius:8px;font-size:12px;cursor:pointer;border-width:1px;border-style:solid">${label}</button>`;
+          } else {
+            confCell = `<span style="color:${confColor};font-weight:700;font-size:12px">${confLabelRead}</span>`;
+          }
+
+          // Presença: só fica ativa a partir do dia do atendimento
+          const att = a.attendance_status;
+          if (!isPast) {
+            presCell = `<span class="muted" style="font-size:12px">Disponível no dia</span>`;
+          } else {
+            let style, label;
+            if (att === 'presente') { style = 'background:#e9f7ef;color:#176b36;border:1px solid #bce3cc'; label = '✓ Compareceu'; }
+            else if (att === 'ausente') { style = 'background:#fdecec;color:#b42318;border:1px solid #f3c6c6'; label = '✗ Não compareceu'; }
+            else { style = 'background:#f3f4f6;color:#475467;border:1px solid #e5e7eb'; label = 'Marcar presença'; }
+            presCell = `<button class="toggle-presence" data-id="${a.id}" data-current="${att}"
+              style="${style};font-weight:700;padding:7px 12px;border-radius:8px;font-size:12px;cursor:pointer;border-width:1px;border-style:solid">${label}</button>`;
+          }
+        }
+
+        html += `<tr style="${isCancelled ? 'opacity:.5;text-decoration:line-through' : ''}">
+          <td style="padding:6px 8px">${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}</td>
+          <td style="text-align:left">${patCell}</td>
+          <td>${confCell}</td>
+          <td>${presCell}</td>
+          <td><button class="action secondary view-patient-ficha" data-id="${a.patient_id}" style="padding:5px 10px;font-size:12px">Ver ficha</button></td>
+        </tr>`;
+      });
+      html += `</table>`;
+    });
+
+    listWrap.innerHTML = html;
+
+    listWrap.querySelectorAll('.toggle-confirm').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const next = btn.dataset.current === 'confirmado' ? 'nao_confirmado' : 'confirmado';
+        const { error } = await db.rpc('confirmar_atendimento', { p_appointment_id: btn.dataset.id, p_confirmacao: next });
+        if (error) alert('Erro: ' + error.message); else loadMyAppointments();
+      });
+    });
+    listWrap.querySelectorAll('.toggle-presence').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const next = btn.dataset.current === 'presente' ? 'ausente' : 'presente';
+        const { error } = await db.rpc('registrar_atendimento', { p_appointment_id: btn.dataset.id, p_status: next, p_cancelado_por: null });
+        if (error) alert('Erro: ' + error.message); else loadMyAppointments();
+      });
+    });
+    listWrap.querySelectorAll('.view-patient-ficha').forEach(btn => {
+      btn.addEventListener('click', () => renderPatientFicha(btn.dataset.id, 'minha_agenda'));
+    });
+  }
+
+  await loadMyAppointments();
+}
+
+// ---------------------------------------------------------------------------
+// PÁGINA: MINHA DISPONIBILIDADE (estagiário)
+// ---------------------------------------------------------------------------
+async function renderMinhaDisponibilidade() {
+  if (!currentIntern) {
+    content.innerHTML = `<section class="panel"><div class="placeholder">Você não possui um cadastro de estagiário vinculado a este login.</div></section>`;
+    return;
+  }
+
+  content.innerHTML = `
+    <section class="panel">
+      <div class="toolbar">
+        <div><h2>Minha disponibilidade</h2><div class="muted">Marque os horários em que você pode atender. Só aparecem os horários liberados pela clínica.</div></div>
+        <button id="saveAvailBtn" class="action">Salvar disponibilidade</button>
+      </div>
+      <div id="availMsg" class="message"></div>
+      <div id="myAvailGrid"><div class="placeholder">Carregando grade...</div></div>
+    </section>`;
+
+  const gridEl = document.getElementById('myAvailGrid');
+  const msg = document.getElementById('availMsg');
+
+  const [{ data: clinicSlots }, { data: mySlots }] = await Promise.all([
+    db.from('clinic_schedule_slots').select('*').eq('enabled', true),
+    db.from('intern_availability').select('*').eq('intern_id', currentIntern.id)
+  ]);
+
+  gridEl.innerHTML = buildAvailabilityGrid(clinicSlots || [], mySlots || []);
+  bindAvailabilityToggles(gridEl);
+
+  document.getElementById('saveAvailBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('saveAvailBtn');
+    btn.disabled = true; btn.textContent = 'Salvando...';
+    msg.style.display = 'none';
+
+    const selected = readSelectedSlots(gridEl).map(s => ({ ...s, intern_id: currentIntern.id }));
+
+    const { error: delErr } = await db.from('intern_availability').delete().eq('intern_id', currentIntern.id);
+    if (delErr) {
+      msg.textContent = 'Erro ao salvar: ' + delErr.message;
+      msg.className = 'message error'; msg.style.display = 'block';
+      btn.disabled = false; btn.textContent = 'Salvar disponibilidade';
+      return;
+    }
+
+    if (selected.length > 0) {
+      const { error: insErr } = await db.from('intern_availability').insert(selected);
+      if (insErr) {
+        msg.textContent = 'Erro ao salvar: ' + insErr.message;
+        msg.className = 'message error'; msg.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Salvar disponibilidade';
+        return;
+      }
+    }
+
+    msg.textContent = 'Disponibilidade salva com sucesso.';
+    msg.className = 'message success'; msg.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Salvar disponibilidade';
+  });
+}
+
+// ---------------------------------------------------------------------------
+// PÁGINA: GRADE GERAL DE DISPONIBILIDADE (calendário semanal cruzado)
+// ---------------------------------------------------------------------------
+let pendingQuickSchedule = null; // usado quando clicar num estagiário aqui e for para a Agenda
+
+async function renderGradeGeral() {
+  content.innerHTML = `
+    <section class="panel">
+      <div class="toolbar">
+        <div><h2>Grade Geral de Disponibilidade</h2><div class="muted">Veja quais estagiários estão disponíveis em cada dia e horário.</div></div>
+      </div>
+      <div id="internFilterWrap" style="margin-bottom:16px"></div>
+      <div id="gradeGeralWrap" style="overflow:auto"><div class="placeholder">Carregando grade...</div></div>
+    </section>`;
+
+  const filterWrap = document.getElementById('internFilterWrap');
+  const gridWrap = document.getElementById('gradeGeralWrap');
+
+  const [{ data: clinicSlots }, { data: interns }] = await Promise.all([
+    db.from('clinic_schedule_slots').select('*').eq('enabled', true),
+    db.from('interns').select('*').eq('status', 'ativo')
+  ]);
+
+  if (!clinicSlots || clinicSlots.length === 0) {
+    gridWrap.innerHTML = `<div class="placeholder">Nenhum horário liberado pela clínica. Configure em "Horários".</div>`;
+    return;
+  }
+  if (!interns || interns.length === 0) {
+    gridWrap.innerHTML = `<div class="placeholder">Nenhum estagiário ativo cadastrado.</div>`;
+    return;
+  }
+
+  const internIds = interns.map(i => i.id);
+  const [{ data: profiles }, { data: allAvail }, { data: activeSeries }] = await Promise.all([
+    db.from('profiles').select('id, full_name').in('id', internIds),
+    db.from('intern_availability').select('*').in('intern_id', internIds),
+    db.from('appointment_series').select('intern_id, weekday, start_time').in('intern_id', internIds).eq('status', 'ativa')
+  ]);
+
+  const occupiedKey = (internId, weekday, startTime) => `${internId}_${weekday}_${startTime}`;
+  const occupiedSet = new Set((activeSeries || []).map(s => occupiedKey(s.intern_id, s.weekday, s.start_time)));
+
+  const nameById = {};
+  (profiles || []).forEach(p => { nameById[p.id] = p.full_name; });
+  const internsList = interns.map(i => ({ id: i.id, full_name: nameById[i.id] || '(sem nome)' }))
+    .sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+  let selectedInternIds = new Set(internsList.map(i => i.id)); // começa com todos marcados
+
+  function renderFilter() {
+    const allSelected = selectedInternIds.size === internsList.length;
+    const label = allSelected ? 'Todos os estagiários' : `${selectedInternIds.size} de ${internsList.length} selecionados`;
+
+    filterWrap.innerHTML = `
+      <div style="position:relative;display:inline-block">
+        <button type="button" id="internFilterToggle" class="action secondary">${label} ▾</button>
+        <div id="internFilterPanel" style="display:none;position:absolute;top:110%;left:0;background:#fff;
+          border:1px solid #e5e9ef;border-radius:10px;padding:10px;box-shadow:0 8px 24px rgba(23,32,51,.12);
+          z-index:20;min-width:240px;max-height:280px;overflow:auto">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;padding:6px 4px;border-bottom:1px solid #eef0f3;margin-bottom:4px;cursor:pointer">
+            <input type="checkbox" id="filterAll" ${allSelected ? 'checked' : ''}> Todos
+          </label>
+          ${internsList.map(i => `
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 4px;cursor:pointer">
+              <input type="checkbox" class="filterIntern" data-id="${i.id}" ${selectedInternIds.has(i.id) ? 'checked' : ''}> ${escapeHtml(i.full_name)}
+            </label>`).join('')}
+        </div>
+      </div>
+      <div style="display:flex;gap:14px;margin-top:10px;font-size:12px" class="muted">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#e9f7ef;border:1px solid #bce3cc;margin-right:5px"></span>Disponível</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#fff4d6;border:1px solid #f0d38a;margin-right:5px"></span>Já tem atendimento fixo</span>
+      </div>`;
+
+    const toggleBtn = document.getElementById('internFilterToggle');
+    const panel = document.getElementById('internFilterPanel');
+    toggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    });
+    document.addEventListener('click', function closePanel(e) {
+      if (!panel.contains(e.target) && e.target !== toggleBtn) panel.style.display = 'none';
+    }, { once: true });
+
+    document.getElementById('filterAll').addEventListener('change', (e) => {
+      selectedInternIds = e.target.checked ? new Set(internsList.map(i => i.id)) : new Set();
+      renderFilter();
+      renderGrid();
+      document.getElementById('internFilterPanel').style.display = 'block';
+    });
+
+    filterWrap.querySelectorAll('.filterIntern').forEach(cb => {
+      cb.addEventListener('change', (e) => {
+        if (e.target.checked) selectedInternIds.add(e.target.dataset.id);
+        else selectedInternIds.delete(e.target.dataset.id);
+        renderFilter();
+        renderGrid();
+        document.getElementById('internFilterPanel').style.display = 'block';
+      });
+    });
+  }
+
+  function renderGrid() {
+    const times = [...new Set(clinicSlots.map(s => s.start_time.slice(0, 5)))].sort();
+
+    let html = `<table style="min-width:820px;border-collapse:collapse;width:100%">
+      <tr style="text-align:left;font-size:12px;color:#667085">
+        <th style="padding:10px 8px">Horário</th>${WEEKDAYS.map(d => `<th>${d.l}</th>`).join('')}
+      </tr>`;
+
+    times.forEach(time => {
+      const hour = parseInt(time.split(':')[0]);
+      const endHour = String(hour + 1).padStart(2, '0') + 'h';
+      html += `<tr style="border-top:1px solid #eef0f3"><td style="padding:8px;font-weight:700;white-space:nowrap">${time.slice(0,2)}h–${endHour}</td>`;
+
+      WEEKDAYS.forEach(d => {
+        const clinicOpen = clinicSlots.some(s => s.weekday === d.n && s.start_time.slice(0, 5) === time);
+        if (!clinicOpen) { html += `<td style="padding:8px;color:#d0d5dd;font-size:11px">Fechado</td>`; return; }
+
+        const matches = (allAvail || []).filter(a =>
+          a.weekday === d.n && a.start_time.slice(0, 5) === time && selectedInternIds.has(a.intern_id)
+        );
+
+        if (matches.length === 0) {
+          html += `<td style="padding:8px;color:#98a2b3;font-size:11px">—</td>`;
+          return;
+        }
+
+        html += `<td style="padding:6px">` + matches.map(a => {
+          const iName = internsList.find(i => i.id === a.intern_id)?.full_name || '?';
+          const isOccupied = occupiedSet.has(occupiedKey(a.intern_id, d.n, a.start_time));
+          const bg = isOccupied ? '#fff4d6' : '#fff';
+          const border = isOccupied ? '#f0d38a' : '#bce3cc';
+          const fg = isOccupied ? '#8a5b00' : '#176b36';
+          const icon = isOccupied ? '📌' : '⚡';
+          return `<button type="button" class="action secondary quick-sched"
+            data-intern-id="${a.intern_id}" data-weekday="${d.n}" data-start="${a.start_time}"
+            style="display:block;width:100%;margin-bottom:4px;padding:5px 8px;font-size:11px;text-align:left;
+            background:${bg};border:1px solid ${border};color:${fg}">${icon} ${escapeHtml(iName)}</button>`;
+        }).join('') + `</td>`;
+      });
+
+      html += `</tr>`;
+    });
+
+    html += `</table>`;
+    gridWrap.innerHTML = html;
+
+    gridWrap.querySelectorAll('.quick-sched').forEach(btn => {
+      btn.addEventListener('click', () => {
+        pendingQuickSchedule = {
+          internId: btn.dataset.internId,
+          weekday: parseInt(btn.dataset.weekday),
+          startTime: btn.dataset.start
+        };
+        currentPage = 'agenda';
+        render();
+      });
+    });
+  }
+
+  renderFilter();
+  renderGrid();
+}
+
+// ---------------------------------------------------------------------------
+// MODAL DE REGISTRO DE ATENDIMENTO (usado na Agenda e em Minha agenda)
+// ---------------------------------------------------------------------------
+function ensureAttendanceModal() {
+  if (document.getElementById('attendanceModal')) return;
+  const div = document.createElement('div');
+  div.id = 'attendanceModal';
+  div.className = 'modal-overlay';
+  div.innerHTML = `
+    <div class="modal-box">
+      <h3 style="margin-top:0">Registrar atendimento</h3>
+      <div class="field"><label>Situação</label>
+        <select id="attStatusSelect">
+          <option value="presente">Presente</option>
+          <option value="ausente">Ausente</option>
+          <option value="cancelado">Cancelado</option>
+        </select>
+      </div>
+      <div class="field" id="attCancelWhoField" style="display:none">
+        <label>Quem cancelou?</label>
+        <select id="attCancelWhoSelect">
+          <option value="paciente">Paciente</option>
+          <option value="estagiario">Estagiário</option>
+          <option value="coordenacao">Coordenação</option>
+        </select>
+      </div>
+      <div id="attModalMsg" class="message"></div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button id="attConfirmBtn" class="action">Salvar</button>
+        <button id="attCancelBtn" class="action secondary">Voltar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+
+  document.getElementById('attStatusSelect').addEventListener('change', (e) => {
+    document.getElementById('attCancelWhoField').style.display = e.target.value === 'cancelado' ? 'block' : 'none';
+  });
+  document.getElementById('attCancelBtn').addEventListener('click', () => { div.style.display = 'none'; });
+}
+
+function showAttendanceModal(appointmentId, onDone, initialStatus = 'presente') {
+  ensureAttendanceModal();
+  const modal = document.getElementById('attendanceModal');
+  document.getElementById('attStatusSelect').value = initialStatus;
+  document.getElementById('attCancelWhoField').style.display = initialStatus === 'cancelado' ? 'block' : 'none';
+  document.getElementById('attModalMsg').style.display = 'none';
+  modal.style.display = 'flex';
+
+  document.getElementById('attConfirmBtn').onclick = async () => {
+    const status = document.getElementById('attStatusSelect').value;
+    const who = status === 'cancelado' ? document.getElementById('attCancelWhoSelect').value : null;
+    const { error } = await db.rpc('registrar_atendimento', {
+      p_appointment_id: appointmentId, p_status: status, p_cancelado_por: who
+    });
+    if (error) {
+      const msg = document.getElementById('attModalMsg');
+      msg.textContent = 'Erro: ' + error.message;
+      msg.className = 'message error'; msg.style.display = 'block';
+      return;
+    }
+    modal.style.display = 'none';
+    if (onDone) onDone();
+  };
+}
+
+// ---------------------------------------------------------------------------
+// AGENDA E AGENDAMENTO
+// ---------------------------------------------------------------------------
+let agendaView = 'semana';    // 'dia' | 'semana' | 'mes'
+let agendaAnchor = new Date();
+let agendaInternFilter = 'todos';
+let agendaPatientFilter = 'todos';
+
+function getDateRange(view, anchor) {
+  const a = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+  if (view === 'dia') return { start: new Date(a), end: new Date(a) };
+  if (view === 'semana') {
+    const day = a.getDay();
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const monday = new Date(a); monday.setDate(a.getDate() + diffToMonday);
+    const saturday = new Date(monday); saturday.setDate(monday.getDate() + 5);
+    return { start: monday, end: saturday };
+  }
+  const first = new Date(a.getFullYear(), a.getMonth(), 1);
+  const last = new Date(a.getFullYear(), a.getMonth() + 1, 0);
+  return { start: first, end: last };
+}
+
+function toDateStr(d) {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function fmtBr(dateStr) { return dateStr.split('-').reverse().join('/'); }
+
+function periodLabel(view, range) {
+  if (view === 'dia') return fmtBr(toDateStr(range.start));
+  if (view === 'semana') return `${fmtBr(toDateStr(range.start))} a ${fmtBr(toDateStr(range.end))}`;
+  return range.start.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+}
+
+async function renderAgenda() {
+  content.innerHTML = `
+    <section class="panel">
+      <div class="toolbar">
+        <div><h2>Agenda</h2><div class="muted">Atendimentos agendados.</div></div>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:10px">
+        <div style="display:flex;gap:4px">
+          <button class="action secondary view-btn" data-v="dia">Dia</button>
+          <button class="action secondary view-btn" data-v="semana">Semana</button>
+          <button class="action secondary view-btn" data-v="mes">Mês</button>
+        </div>
+        <button id="prevPeriod" class="action secondary">◀</button>
+        <div id="periodLabel" style="font-weight:700;min-width:160px;text-align:center"></div>
+        <button id="nextPeriod" class="action secondary">▶</button>
+        <button id="todayBtn" class="action secondary">Hoje</button>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px">
+        <button id="newApptBtn" class="action">+ Novo agendamento</button>
+        <div style="display:flex;gap:8px">
+          <select id="filterIntern" class="context-select" style="font-weight:normal;font-size:13px"></select>
+          <select id="filterPatient" class="context-select" style="font-weight:normal;font-size:13px"></select>
+        </div>
+      </div>
+
+      <div id="agendaListWrap"><div class="placeholder">Carregando...</div></div>
+    </section>
+
+    <section id="apptFormPanel" class="panel" style="display:none">
+      <div class="toolbar"><h2>Novo agendamento semanal</h2></div>
+      <div id="apptFormMsg" class="message"></div>
+
+      <div class="field"><label>Paciente *</label><select id="fPatient"><option value="">Selecione...</option></select></div>
+      <div class="field"><label>Estagiário *</label><select id="fIntern" disabled><option value="">Escolha o paciente primeiro</option></select></div>
+      <div class="field"><label>Dia e horário *</label><select id="fSlot" disabled><option value="">Escolha o estagiário primeiro</option></select></div>
+      <div class="field"><label>Data de início *</label><input type="date" id="fStartDate"></div>
+      <div class="field"><label>Data de término *</label><input type="date" id="fEndDate"></div>
+
+      <div id="apptPreviewBox" style="margin-top:14px;padding:14px;background:#f4f7fb;border-radius:10px">
+        <strong>Prévia:</strong>
+        <p id="apptPreviewText" style="margin:6px 0 0;color:#667085">Preencha os campos acima.</p>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button id="confirmApptBtn" class="action" disabled>Validar e criar atendimentos</button>
+        <button id="cancelApptBtn" class="action secondary">Cancelar</button>
+      </div>
+    </section>
+
+    <div id="cancelReasonModal" class="modal-overlay">
+      <div class="modal-box">
+        <h3 style="margin-top:0">Cancelar atendimento</h3>
+        <div class="field">
+          <label>Motivo do cancelamento</label>
+          <select id="cancelReasonSelect">
+            <option value="paciente_nao_respondeu">Paciente não respondeu</option>
+            <option value="paciente_nao_podera_comparecer">Paciente não poderá comparecer</option>
+            <option value="estagiario_nao_confirmou">Estagiário não confirmou</option>
+            <option value="estagiario_nao_podera_comparecer">Estagiário não poderá comparecer</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:14px">
+          <button id="confirmCancelReasonBtn" class="action">Confirmar cancelamento</button>
+          <button id="closeCancelModalBtn" class="action secondary">Voltar</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="editSeriesModal" class="modal-overlay">
+      <div class="modal-box" style="width:min(560px,100%)">
+        <h3 style="margin-top:0">Editar agendamento</h3>
+        <div id="editSeriesInfo" class="muted" style="margin-bottom:14px"></div>
+        <div id="editSeriesMsg" class="message"></div>
+        <div class="field"><label>Dia e horário</label><select id="editSeriesSlot"><option value="">Carregando...</option></select></div>
+        <div class="field"><label>Data de término</label><input type="date" id="editSeriesEndDate"></div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">
+          Atendimentos já realizados, ausentes ou cancelados não são alterados. Apenas os atendimentos futuros ainda pendentes serão recriados conforme as novas configurações.
+        </div>
+        <div style="display:flex;gap:10px;margin-top:8px">
+          <button id="saveEditSeriesBtn" class="action">Salvar alterações</button>
+          <button id="closeEditSeriesBtn" class="action secondary">Voltar</button>
+        </div>
+      </div>
+    </div>`;
+
+  const listWrap = document.getElementById('agendaListWrap');
+  const panel = document.getElementById('apptFormPanel');
+  const msg = document.getElementById('apptFormMsg');
+
+  // ---- Dados de apoio (pacientes e estagiários ativos) ----
+  const [{ data: patients }, { data: interns }] = await Promise.all([
+    db.from('patients').select('id, registration_number, full_name').eq('status', 'ativo'),
+    db.from('interns').select('id').eq('status', 'ativo')
+  ]);
+  const internIds = (interns || []).map(i => i.id);
+  const { data: profiles } = internIds.length
+    ? await db.from('profiles').select('id, full_name').in('id', internIds)
+    : { data: [] };
+  const nameById = {};
+  (profiles || []).forEach(p => { nameById[p.id] = p.full_name; });
+  const internsList = (interns || []).map(i => ({ id: i.id, full_name: nameById[i.id] || '(sem nome)' }))
+    .sort((a, b) => a.full_name.localeCompare(b.full_name));
+  const patientsList = (patients || []).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
+
+  const { data: clinicSlots } = await db.from('clinic_schedule_slots').select('*').eq('enabled', true);
+  const { data: allInternAvail } = internIds.length
+    ? await db.from('intern_availability').select('*').in('intern_id', internIds)
+    : { data: [] };
+
+  // ---- Filtros da listagem ----
+  const filterIntern = document.getElementById('filterIntern');
+  const filterPatient = document.getElementById('filterPatient');
+  filterIntern.innerHTML = '<option value="todos">Todos os estagiários</option>' +
+    internsList.map(i => `<option value="${i.id}">${escapeHtml(i.full_name)}</option>`).join('');
+  filterPatient.innerHTML = '<option value="todos">Todos os pacientes</option>' +
+    patientsList.map(p => `<option value="${p.id}">#${escapeHtml(p.registration_number)} ${escapeHtml(p.full_name || '')}</option>`).join('');
+  filterIntern.value = agendaInternFilter;
+  filterPatient.value = agendaPatientFilter;
+
+  filterIntern.addEventListener('change', () => { agendaInternFilter = filterIntern.value; loadAppointments(); });
+  filterPatient.addEventListener('change', () => { agendaPatientFilter = filterPatient.value; loadAppointments(); });
+
+  document.querySelectorAll('.view-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.v === agendaView);
+    btn.addEventListener('click', () => {
+      agendaView = btn.dataset.v;
+      document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.dataset.v === agendaView));
+      loadAppointments();
+    });
+  });
+
+  document.getElementById('prevPeriod').addEventListener('click', () => { shiftAnchor(-1); loadAppointments(); });
+  document.getElementById('nextPeriod').addEventListener('click', () => { shiftAnchor(1); loadAppointments(); });
+  document.getElementById('todayBtn').addEventListener('click', () => { agendaAnchor = new Date(); loadAppointments(); });
+
+  function shiftAnchor(dir) {
+    const a = new Date(agendaAnchor);
+    if (agendaView === 'dia') a.setDate(a.getDate() + dir);
+    else if (agendaView === 'semana') a.setDate(a.getDate() + dir * 7);
+    else a.setMonth(a.getMonth() + dir);
+    agendaAnchor = a;
+  }
+
+  const todayStrForRows = toDateStr(new Date());
+
+  function renderApptRow(a) {
+    const internName = nameById[a.intern_id] || '?';
+    const patLabel = a.patients ? `#${a.patients.registration_number} ${a.patients.full_name || ''}` : '—';
+    const isCancelled = a.status === 'cancelado';
+    const isPast = a.appointment_date <= todayStrForRows;
+
+    let patCell, internCell, presCell;
+
+    if (isCancelled) {
+      patCell = `<div style="text-align:left">${escapeHtml(patLabel)}</div>`;
+      internCell = `<div style="text-align:left">${escapeHtml(internName)}</div>`;
+      presCell = '—';
+    } else {
+      const cp = a.patient_confirmation;
+      let cpStyle, cpLabel;
+      if (cp === 'confirmado') { cpStyle = 'background:#e9f7ef;color:#176b36;border:1px solid #bce3cc'; cpLabel = '✓ Confirmado'; }
+      else if (cp === 'nao_confirmado') { cpStyle = 'background:#fdecec;color:#b42318;border:1px solid #f3c6c6'; cpLabel = '✗ Não confirmado'; }
+      else { cpStyle = 'background:#f3f4f6;color:#475467;border:1px solid #e5e7eb'; cpLabel = 'Confirmar'; }
+      patCell = `<div style="text-align:left">${escapeHtml(patLabel)}</div>
+        <button class="toggle-conf-patient" data-id="${a.id}" data-current="${cp}"
+          style="${cpStyle};font-weight:700;padding:4px 9px;border-radius:8px;font-size:11px;cursor:pointer;margin-top:4px">${cpLabel}</button>`;
+
+      const ci = a.intern_confirmation;
+      let ciStyle, ciLabel;
+      if (ci === 'confirmado') { ciStyle = 'background:#e9f7ef;color:#176b36;border:1px solid #bce3cc'; ciLabel = '✓ Confirmado'; }
+      else if (ci === 'nao_confirmado') { ciStyle = 'background:#fdecec;color:#b42318;border:1px solid #f3c6c6'; ciLabel = '✗ Não confirmado'; }
+      else { ciStyle = 'background:#f3f4f6;color:#475467;border:1px solid #e5e7eb'; ciLabel = 'Confirmar'; }
+      internCell = `<div style="text-align:left">${escapeHtml(internName)}</div>
+        <button class="toggle-conf-intern" data-id="${a.id}" data-current="${ci}"
+          style="${ciStyle};font-weight:700;padding:4px 9px;border-radius:8px;font-size:11px;cursor:pointer;margin-top:4px">${ciLabel}</button>`;
+
+      if (!isPast) {
+        presCell = `<span class="muted" style="font-size:12px">Disponível no dia</span>`;
+      } else {
+        const att = a.attendance_status;
+        let attStyle, attLabel2;
+        if (att === 'presente') { attStyle = 'background:#e9f7ef;color:#176b36;border:1px solid #bce3cc'; attLabel2 = '✓ Compareceu'; }
+        else if (att === 'ausente') { attStyle = 'background:#fdecec;color:#b42318;border:1px solid #f3c6c6'; attLabel2 = '✗ Não compareceu'; }
+        else { attStyle = 'background:#f3f4f6;color:#475467;border:1px solid #e5e7eb'; attLabel2 = 'Marcar presença'; }
+        presCell = `<button class="toggle-presence" data-id="${a.id}" data-current="${att}"
+          style="${attStyle};font-weight:700;padding:6px 10px;border-radius:8px;font-size:12px;cursor:pointer">${attLabel2}</button>`;
+      }
+    }
+
+    const whoCancelledLabel = { paciente: 'Paciente', estagiario: 'Estagiário', coordenacao: 'Coordenação' }[a.cancelled_by] || '';
+    const reasonLabel = a.cancellation_reason ? CANCELLATION_REASON_LABELS[a.cancellation_reason] || '' : '';
+    const acaoCell = isCancelled
+      ? `<span title="${escapeHtml(reasonLabel)}" style="font-size:12px;color:#9a6700;font-weight:700">Cancelado por ${whoCancelledLabel}</span>
+         <button class="action secondary uncancel-appt" data-id="${a.id}" style="padding:3px 8px;font-size:11px;margin-left:6px">Reativar</button>`
+      : `<button class="action secondary edit-series-btn" data-series-id="${a.series_id}" style="padding:4px 8px;font-size:12px">Editar</button>
+         <button class="action secondary cancel-appt" data-id="${a.id}" style="padding:4px 8px;font-size:12px;color:#b42318">Cancelar</button>`;
+
+    return `<tr style="${isCancelled ? 'opacity:.6' : ''}">
+      <td style="padding:6px 8px">${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}</td>
+      <td>${patCell}</td>
+      <td>${internCell}</td>
+      <td>${presCell}</td>
+      <td>${acaoCell}</td>
+    </tr>`;
+  }
+
+  function renderDateGroups(list) {
+    if (list.length === 0) return '';
+    const byDate = {};
+    list.forEach(a => { (byDate[a.appointment_date] = byDate[a.appointment_date] || []).push(a); });
+
+    return Object.keys(byDate).sort().map(date => {
+      const d = new Date(date + 'T00:00:00');
+      const weekdayLabel = d.toLocaleDateString('pt-BR', { weekday: 'long' });
+      const rows = byDate[date].map(renderApptRow).join('');
+      return `<div style="margin:16px 0 6px;font-weight:700;text-transform:capitalize">${weekdayLabel}, ${fmtBr(date)}</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
+        <colgroup>
+          <col style="width:12%"><col style="width:27%"><col style="width:27%"><col style="width:18%"><col style="width:16%">
+        </colgroup>
+        <tr style="text-align:left;font-size:12px;color:#667085">
+          <th style="padding:6px 8px">Horário</th><th style="text-align:left">Paciente</th><th style="text-align:left">Estagiário</th><th>Presença</th><th>Ações</th>
+        </tr>${rows}</table>`;
+    }).join('');
+  }
+
+  async function loadAppointments() {
+    const range = getDateRange(agendaView, agendaAnchor);
+    document.getElementById('periodLabel').textContent = periodLabel(agendaView, range);
+
+    let query = db.from('appointments')
+      .select('id, series_id, appointment_date, start_time, end_time, status, intern_confirmation, patient_confirmation, attendance_status, cancelled_by, cancellation_reason, patient_id, intern_id, patients(registration_number, full_name)')
+      .gte('appointment_date', toDateStr(range.start))
+      .lte('appointment_date', toDateStr(range.end))
+      .order('appointment_date').order('start_time');
+
+    if (agendaInternFilter !== 'todos') query = query.eq('intern_id', agendaInternFilter);
+    if (agendaPatientFilter !== 'todos') query = query.eq('patient_id', agendaPatientFilter);
+
+    const { data: appts, error } = await query;
+    if (error) { listWrap.innerHTML = `<div class="message error" style="display:block">Erro: ${escapeHtml(error.message)}</div>`; return; }
+
+    if (!appts || appts.length === 0) {
+      listWrap.innerHTML = `<div class="placeholder">Nenhum atendimento neste período.</div>`;
+      return;
+    }
+
+    const nowDateStr = toDateStr(new Date());
+    const nowTimeStr = new Date().toTimeString().slice(0, 8);
+    const isUpcoming = a => a.status === 'agendado'
+      && (a.appointment_date > nowDateStr || (a.appointment_date === nowDateStr && a.start_time > nowTimeStr));
+
+    const upcoming = appts.filter(isUpcoming);
+    const concluded = appts.filter(a => !isUpcoming(a));
+
+    let html = renderDateGroups(upcoming);
+    if (concluded.length > 0) {
+      html += `<div style="margin:28px 0 8px;font-weight:700;color:#98a2b3">— Já concluídos —</div>`;
+      html += renderDateGroups(concluded);
+    }
+    if (!html) html = `<div class="placeholder">Nenhum atendimento neste período.</div>`;
+
+    listWrap.innerHTML = html;
+
+    listWrap.querySelectorAll('.toggle-conf-intern').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Confirmar o atendimento é tarefa do estagiário. Deseja mesmo alterar isso agora?')) return;
+        const next = btn.dataset.current === 'confirmado' ? 'nao_confirmado' : 'confirmado';
+        const { error } = await db.rpc('confirmar_atendimento', { p_appointment_id: btn.dataset.id, p_confirmacao: next });
+        if (error) alert('Erro: ' + error.message); else loadAppointments();
+      });
+    });
+
+    listWrap.querySelectorAll('.toggle-conf-patient').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const next = btn.dataset.current === 'confirmado' ? 'nao_confirmado' : 'confirmado';
+        const { error } = await db.from('appointments').update({ patient_confirmation: next }).eq('id', btn.dataset.id);
+        if (error) alert('Erro: ' + error.message); else loadAppointments();
+      });
+    });
+
+    listWrap.querySelectorAll('.toggle-presence').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Marcar a presença é tarefa do estagiário. Deseja mesmo alterar isso agora?')) return;
+        const next = btn.dataset.current === 'presente' ? 'ausente' : 'presente';
+        const { error } = await db.rpc('registrar_atendimento', { p_appointment_id: btn.dataset.id, p_status: next, p_cancelado_por: null });
+        if (error) alert('Erro: ' + error.message); else loadAppointments();
+      });
+    });
+
+    listWrap.querySelectorAll('.uncancel-appt').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Reativar este atendimento? Ele voltará para o status agendado.')) return;
+        const { error } = await db.from('appointments').update({
+          status: 'agendado', cancelled_by: null, cancelled_at: null, cancellation_reason: null
+        }).eq('id', btn.dataset.id);
+        if (error) alert('Erro: ' + error.message); else loadAppointments();
+      });
+    });
+
+    const cancelModal = document.getElementById('cancelReasonModal');
+    let cancelTargetId = null;
+
+    listWrap.querySelectorAll('.cancel-appt').forEach(btn => {
+      btn.addEventListener('click', () => {
+        cancelTargetId = btn.dataset.id;
+        document.getElementById('cancelReasonSelect').value = 'paciente_nao_respondeu';
+        cancelModal.style.display = 'flex';
+      });
+    });
+
+    document.getElementById('closeCancelModalBtn').onclick = () => { cancelModal.style.display = 'none'; cancelTargetId = null; };
+    document.getElementById('confirmCancelReasonBtn').onclick = async () => {
+      if (!cancelTargetId) return;
+      const reason = document.getElementById('cancelReasonSelect').value;
+      await db.from('appointments').update({
+        status: 'cancelado', cancelled_by: 'coordenacao', cancelled_at: new Date().toISOString(),
+        cancellation_reason: reason
+      }).eq('id', cancelTargetId);
+      cancelModal.style.display = 'none';
+      cancelTargetId = null;
+      loadAppointments();
+    };
+
+    // ---- Editar série (agendamento) ----
+    const editModal = document.getElementById('editSeriesModal');
+    const editSlotSelect = document.getElementById('editSeriesSlot');
+    const editEndDate = document.getElementById('editSeriesEndDate');
+    const editInfo = document.getElementById('editSeriesInfo');
+    const editMsg = document.getElementById('editSeriesMsg');
+    let editingSeries = null;
+
+    listWrap.querySelectorAll('.edit-series-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        editMsg.style.display = 'none';
+        editSlotSelect.innerHTML = '<option value="">Carregando...</option>';
+        editInfo.textContent = 'Carregando...';
+        editModal.style.display = 'flex';
+
+        const { data: series, error: seriesErr } = await db.from('appointment_series').select('*').eq('id', btn.dataset.seriesId).single();
+        if (seriesErr) { editInfo.textContent = 'Erro ao carregar: ' + seriesErr.message; return; }
+        editingSeries = series;
+
+        const patientName = (() => {
+          const p = (appts || []).find(x => x.patient_id === series.patient_id)?.patients;
+          return p ? `#${p.registration_number} ${p.full_name || ''}` : series.patient_id;
+        })();
+        const internName = nameById[series.intern_id] || '?';
+        editInfo.innerHTML = `Paciente: <strong>${escapeHtml(patientName)}</strong> · Estagiário: <strong>${escapeHtml(internName)}</strong>`;
+
+        const [{ data: clinicSlots }, { data: internAvail }, { data: patAvail }] = await Promise.all([
+          db.from('clinic_schedule_slots').select('*').eq('enabled', true),
+          db.from('intern_availability').select('weekday, start_time').eq('intern_id', series.intern_id),
+          db.from('patient_availability').select('weekday, start_time').eq('patient_id', series.patient_id)
+        ]);
+
+        const candidates = (clinicSlots || []).filter(c => {
+          const internMatch = (internAvail || []).some(a => a.weekday === c.weekday && a.start_time.slice(0, 5) === c.start_time.slice(0, 5));
+          if (!internMatch) return false;
+          if (patAvail && patAvail.length > 0) {
+            return patAvail.some(p => p.weekday === c.weekday && p.start_time.slice(0, 5) === c.start_time.slice(0, 5));
+          }
+          return true;
+        }).sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time));
+
+        if (candidates.length === 0) {
+          editSlotSelect.innerHTML = '<option value="">Nenhum horário compatível encontrado</option>';
+        } else {
+          editSlotSelect.innerHTML = candidates.map(c => {
+            const dayLabel = WEEKDAYS.find(d => d.n === c.weekday).l;
+            const val = `${c.weekday}|${c.start_time}|${c.end_time}`;
+            const isCurrent = c.weekday === series.weekday && c.start_time.slice(0, 5) === series.start_time.slice(0, 5);
+            return `<option value="${val}" ${isCurrent ? 'selected' : ''}>${dayLabel} ${c.start_time.slice(0,5)}–${c.end_time.slice(0,5)}</option>`;
+          }).join('');
+        }
+
+        editEndDate.value = series.series_end;
+      });
+    });
+
+    document.getElementById('closeEditSeriesBtn').onclick = () => { editModal.style.display = 'none'; editingSeries = null; };
+
+    document.getElementById('saveEditSeriesBtn').onclick = async () => {
+      if (!editingSeries) return;
+      editMsg.style.display = 'none';
+
+      const slotVal = editSlotSelect.value;
+      const newEndDate = editEndDate.value;
+      if (!slotVal || !newEndDate) {
+        editMsg.textContent = 'Selecione o horário e a data de término.';
+        editMsg.className = 'message error'; editMsg.style.display = 'block';
+        return;
+      }
+      if (newEndDate < toDateStr(new Date())) {
+        editMsg.textContent = 'A data de término não pode ser no passado.';
+        editMsg.className = 'message error'; editMsg.style.display = 'block';
+        return;
+      }
+
+      const [weekdayStr, newStart, newEnd] = slotVal.split('|');
+      const newWeekday = parseInt(weekdayStr);
+      const btn = document.getElementById('saveEditSeriesBtn');
+      btn.disabled = true; btn.textContent = 'Salvando...';
+
+      // Gera as novas datas futuras (a partir de hoje) até a nova data de término
+      const todayD = new Date(toDateStr(new Date()) + 'T00:00:00');
+      let curr = new Date(todayD);
+      while (curr.getDay() !== newWeekday) curr.setDate(curr.getDate() + 1);
+      const endD = new Date(newEndDate + 'T00:00:00');
+      const newDates = [];
+      while (curr <= endD) { newDates.push(toDateStr(curr)); curr.setDate(curr.getDate() + 7); }
+
+      if (newDates.length > 0) {
+        const { data: conflicts } = await db.from('appointments')
+          .select('appointment_date, intern_id, patient_id, series_id')
+          .in('appointment_date', newDates).eq('start_time', newStart).eq('status', 'agendado');
+
+        const hasConflict = (conflicts || []).some(c => c.series_id !== editingSeries.id &&
+          (c.intern_id === editingSeries.intern_id || c.patient_id === editingSeries.patient_id));
+
+        if (hasConflict) {
+          editMsg.textContent = 'Conflito: o estagiário ou o paciente já têm atendimento em pelo menos uma dessas datas/horário.';
+          editMsg.className = 'message error'; editMsg.style.display = 'block';
+          btn.disabled = false; btn.textContent = 'Salvar alterações';
+          return;
+        }
+      }
+
+      // Remove os atendimentos futuros ainda pendentes desta série
+      const { error: delErr } = await db.from('appointments').delete()
+        .eq('series_id', editingSeries.id).eq('status', 'agendado').eq('attendance_status', 'pendente')
+        .gte('appointment_date', toDateStr(new Date()));
+      if (delErr) {
+        editMsg.textContent = 'Erro ao atualizar: ' + delErr.message;
+        editMsg.className = 'message error'; editMsg.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Salvar alterações';
+        return;
+      }
+
+      await db.from('appointment_series').update({
+        weekday: newWeekday, start_time: newStart, end_time: newEnd, series_end: newEndDate
+      }).eq('id', editingSeries.id);
+
+      if (newDates.length > 0) {
+        const newAppts = newDates.map(d => ({
+          series_id: editingSeries.id, patient_id: editingSeries.patient_id, intern_id: editingSeries.intern_id,
+          appointment_date: d, start_time: newStart, end_time: newEnd
+        }));
+        await db.from('appointments').insert(newAppts);
+      }
+
+      editModal.style.display = 'none';
+      editingSeries = null;
+      btn.disabled = false; btn.textContent = 'Salvar alterações';
+      loadAppointments();
+    };
+  }
+
+  // ---- Formulário de novo agendamento ----
+  const fPatient = document.getElementById('fPatient');
+  const fIntern = document.getElementById('fIntern');
+  const fSlot = document.getElementById('fSlot');
+  const fStartDate = document.getElementById('fStartDate');
+  const fEndDate = document.getElementById('fEndDate');
+  const previewText = document.getElementById('apptPreviewText');
+  const confirmBtn = document.getElementById('confirmApptBtn');
+
+  fPatient.innerHTML = '<option value="">Selecione...</option>' +
+    patientsList.map(p => `<option value="${p.id}">#${escapeHtml(p.registration_number)} — ${escapeHtml(p.full_name || 'Sem nome')}</option>`).join('');
+
+  function resetApptForm() {
+    msg.style.display = 'none';
+    fPatient.value = ''; fIntern.innerHTML = '<option value="">Escolha o paciente primeiro</option>'; fIntern.disabled = true;
+    fSlot.innerHTML = '<option value="">Escolha o estagiário primeiro</option>'; fSlot.disabled = true;
+    fStartDate.value = ''; fEndDate.value = '';
+    previewText.textContent = 'Preencha os campos acima.';
+    confirmBtn.disabled = true;
+  }
+
+  async function updateInternOptions() {
+    const patientId = fPatient.value;
+    fIntern.innerHTML = '<option value="">Selecione...</option>';
+    fSlot.innerHTML = '<option value="">Escolha o estagiário primeiro</option>';
+    fSlot.disabled = true;
+    confirmBtn.disabled = true;
+    previewText.textContent = 'Preencha os campos acima.';
+
+    if (!patientId) { fIntern.disabled = true; fIntern.innerHTML = '<option value="">Escolha o paciente primeiro</option>'; return; }
+
+    const { data: patAvail } = await db.from('patient_availability').select('weekday, start_time').eq('patient_id', patientId);
+
+    const compatible = internsList.filter(intern => {
+      const availForIntern = (allInternAvail || []).filter(a => a.intern_id === intern.id);
+      const enabledAvail = availForIntern.filter(a => (clinicSlots || []).some(c => c.weekday === a.weekday && c.start_time.slice(0, 5) === a.start_time.slice(0, 5)));
+      if (enabledAvail.length === 0) return false;
+      if (patAvail && patAvail.length > 0) {
+        return enabledAvail.some(a => patAvail.some(p => p.weekday === a.weekday && p.start_time.slice(0, 5) === a.start_time.slice(0, 5)));
+      }
+      return true;
+    });
+
+    if (compatible.length === 0) {
+      fIntern.innerHTML = '<option value="">Nenhum estagiário compatível</option>';
+      fIntern.disabled = true;
+      return;
+    }
+
+    fIntern.innerHTML = '<option value="">Selecione...</option>' + compatible.map(i => `<option value="${i.id}">${escapeHtml(i.full_name)}</option>`).join('');
+    fIntern.disabled = false;
+
+    if (pendingQuickSchedule && compatible.some(i => i.id === pendingQuickSchedule.internId)) {
+      fIntern.value = pendingQuickSchedule.internId;
+      await updateSlotOptions();
+    }
+  }
+
+  async function updateSlotOptions() {
+    const patientId = fPatient.value;
+    const internId = fIntern.value;
+    fSlot.innerHTML = '<option value="">Selecione...</option>';
+    confirmBtn.disabled = true;
+    previewText.textContent = 'Preencha os campos acima.';
+
+    if (!patientId || !internId) { fSlot.disabled = true; return; }
+
+    const { data: patAvail } = await db.from('patient_availability').select('weekday, start_time').eq('patient_id', patientId);
+    const internAvail = (allInternAvail || []).filter(a => a.intern_id === internId);
+
+    const candidates = (clinicSlots || []).filter(c => {
+      const internMatch = internAvail.some(a => a.weekday === c.weekday && a.start_time.slice(0, 5) === c.start_time.slice(0, 5));
+      if (!internMatch) return false;
+      if (patAvail && patAvail.length > 0) {
+        return patAvail.some(p => p.weekday === c.weekday && p.start_time.slice(0, 5) === c.start_time.slice(0, 5));
+      }
+      return true;
+    }).sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time));
+
+    if (candidates.length === 0) {
+      fSlot.innerHTML = '<option value="">Nenhum horário compatível</option>';
+      fSlot.disabled = true;
+      return;
+    }
+
+    fSlot.innerHTML = '<option value="">Selecione...</option>' + candidates.map(c => {
+      const dayLabel = WEEKDAYS.find(d => d.n === c.weekday).l;
+      return `<option value="${c.weekday}|${c.start_time}|${c.end_time}">${dayLabel} ${c.start_time.slice(0,5)}–${c.end_time.slice(0,5)}</option>`;
+    }).join('');
+    fSlot.disabled = false;
+
+    if (pendingQuickSchedule && pendingQuickSchedule.internId === internId) {
+      const match = candidates.find(c => c.weekday === pendingQuickSchedule.weekday && c.start_time.slice(0, 5) === pendingQuickSchedule.startTime.slice(0, 5));
+      if (match) fSlot.value = `${match.weekday}|${match.start_time}|${match.end_time}`;
+    }
+  }
+
+  async function calculatePreview() {
+    msg.style.display = 'none';
+    confirmBtn.disabled = true;
+
+    const patientId = fPatient.value;
+    const internId = fIntern.value;
+    const slotVal = fSlot.value;
+    const startDateStr = fStartDate.value;
+    const endDateStr = fEndDate.value;
+
+    if (!patientId || !internId || !slotVal || !startDateStr || !endDateStr) {
+      previewText.textContent = 'Preencha todos os campos para calcular a prévia.';
+      return;
+    }
+
+    const [weekdayStr, startTime, endTime] = slotVal.split('|');
+    const weekday = parseInt(weekdayStr);
+    const start = new Date(startDateStr + 'T00:00:00');
+    const end = new Date(endDateStr + 'T00:00:00');
+
+    if (start > end) {
+      msg.textContent = 'A data inicial não pode ser posterior à data final.';
+      msg.className = 'message error'; msg.style.display = 'block';
+      return;
+    }
+
+    let curr = new Date(start);
+    while (curr.getDay() !== weekday) curr.setDate(curr.getDate() + 1);
+    const generatedDates = [];
+    while (curr <= end) { generatedDates.push(new Date(curr)); curr.setDate(curr.getDate() + 7); }
+
+    if (generatedDates.length === 0) {
+      previewText.textContent = 'Nenhuma data encontrada para este dia da semana no período.';
+      return;
+    }
+
+    const dateStrings = generatedDates.map(toDateStr);
+    const { data: conflicts } = await db.from('appointments')
+      .select('appointment_date, intern_id, patient_id')
+      .in('appointment_date', dateStrings)
+      .eq('start_time', startTime)
+      .eq('status', 'agendado');
+
+    if (conflicts && conflicts.some(c => c.intern_id === internId || c.patient_id === patientId)) {
+      msg.textContent = 'Conflito: o estagiário ou o paciente já possuem atendimento em pelo menos uma dessas datas/horário.';
+      msg.className = 'message error'; msg.style.display = 'block';
+      return;
+    }
+
+    previewText.innerHTML = `Serão gerados <strong>${generatedDates.length} atendimentos semanais</strong>
+      (${startTime.slice(0,5)}–${endTime.slice(0,5)}).<br>
+      <small>Primeira sessão: ${generatedDates[0].toLocaleDateString('pt-BR')} · Última sessão: ${generatedDates[generatedDates.length-1].toLocaleDateString('pt-BR')}</small>`;
+    confirmBtn.disabled = false;
+
+    confirmBtn.onclick = async () => {
+      confirmBtn.disabled = true; confirmBtn.textContent = 'Criando...';
+
+      const { data: series, error: seriesErr } = await db.from('appointment_series').insert([{
+        patient_id: patientId, intern_id: internId, weekday, start_time: startTime, end_time: endTime,
+        series_start: startDateStr, series_end: endDateStr, status: 'ativa', created_by: currentProfile.id
+      }]).select().single();
+
+      if (seriesErr) {
+        msg.textContent = 'Erro ao criar agendamento: ' + seriesErr.message;
+        msg.className = 'message error'; msg.style.display = 'block';
+        confirmBtn.disabled = false; confirmBtn.textContent = 'Validar e criar atendimentos';
+        return;
+      }
+
+      const newAppts = generatedDates.map(d => ({
+        series_id: series.id, patient_id: patientId, intern_id: internId,
+        appointment_date: toDateStr(d), start_time: startTime, end_time: endTime
+      }));
+
+      const { error: apptsErr } = await db.from('appointments').insert(newAppts);
+      if (apptsErr) {
+        msg.textContent = 'Erro ao gerar atendimentos: ' + apptsErr.message;
+        msg.className = 'message error'; msg.style.display = 'block';
+        confirmBtn.disabled = false; confirmBtn.textContent = 'Validar e criar atendimentos';
+        return;
+      }
+
+      pendingQuickSchedule = null;
+      panel.style.display = 'none';
+      await loadAppointments();
+      confirmBtn.disabled = false; confirmBtn.textContent = 'Validar e criar atendimentos';
+    };
+  }
+
+  fPatient.addEventListener('change', updateInternOptions);
+  fIntern.addEventListener('change', updateSlotOptions);
+  [fSlot, fStartDate, fEndDate].forEach(el => el.addEventListener('change', calculatePreview));
+
+  document.getElementById('newApptBtn').addEventListener('click', async () => {
+    resetApptForm();
+    panel.style.display = 'block';
+    panel.scrollIntoView({ behavior: 'smooth' });
+    if (pendingQuickSchedule) {
+      // Paciente ainda precisa ser escolhido manualmente; estagiário e horário
+      // serão pré-marcados assim que o paciente for selecionado.
+      msg.textContent = 'Selecione o paciente para concluir o agendamento rápido a partir da Grade Geral.';
+      msg.className = 'message success'; msg.style.display = 'block';
+    }
+  });
+  document.getElementById('cancelApptBtn').addEventListener('click', () => { pendingQuickSchedule = null; panel.style.display = 'none'; });
+
+  await loadAppointments();
+}
+
+// ---------------------------------------------------------------------------
+// INICIALIZAÇÃO
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// REDEFINIÇÃO DE SENHA (link enviado por e-mail)
+// ---------------------------------------------------------------------------
+const newPasswordScreen = document.getElementById('newPasswordScreen');
+const newPasswordForm = document.getElementById('newPasswordForm');
+const newPasswordButton = document.getElementById('newPasswordButton');
+const newPasswordMessage = document.getElementById('newPasswordMessage');
+let inPasswordRecovery = window.location.hash.includes('type=recovery');
+
+db.auth.onAuthStateChange((event) => {
+  if (event === 'PASSWORD_RECOVERY') {
+    inPasswordRecovery = true;
+    loadingScreen.style.display = 'none';
+    loginScreen.style.display = 'none';
+    app.style.display = 'none';
+    newPasswordScreen.style.display = 'flex';
+  }
+});
+
+newPasswordForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const p1 = document.getElementById('newPassword1').value;
+  const p2 = document.getElementById('newPassword2').value;
+  newPasswordMessage.className = 'message';
+
+  if (p1 !== p2) {
+    newPasswordMessage.textContent = 'As senhas não coincidem.';
+    newPasswordMessage.className = 'message error';
+    return;
+  }
+
+  newPasswordButton.disabled = true; newPasswordButton.textContent = 'Salvando...';
+  const { error } = await db.auth.updateUser({ password: p1 });
+  newPasswordButton.disabled = false; newPasswordButton.textContent = 'Salvar nova senha';
+
+  if (error) {
+    newPasswordMessage.textContent = 'Erro ao salvar: ' + error.message;
+    newPasswordMessage.className = 'message error';
+    return;
+  }
+
+  inPasswordRecovery = false;
+  await db.auth.signOut();
+  newPasswordScreen.style.display = 'none';
+  loginScreen.style.display = 'flex';
+  newPasswordForm.reset();
+  showMessage('Senha alterada com sucesso. Entre com sua nova senha.', 'success');
+});
+
+// ---------------------------------------------------------------------------
+// INICIALIZAÇÃO
+// ---------------------------------------------------------------------------
+(async function init() {
+  if (inPasswordRecovery) {
+    loadingScreen.style.display = 'none';
+    newPasswordScreen.style.display = 'flex';
+    return;
+  }
+  const { data: { session } } = await db.auth.getSession();
+  if (inPasswordRecovery) return;
+  if (session?.user) {
+    try {
+      await loadProfile(session.user);
+    } catch (e) {
+      await db.auth.signOut();
+      loadingScreen.style.display = 'none';
+      loginScreen.style.display = 'flex';
+      showMessage(e.message || 'Erro ao carregar perfil.');
+    }
+  } else {
+    loadingScreen.style.display = 'none';
+    loginScreen.style.display = 'flex';
+  }
+})();
 </script>
 </body>
 </html>
