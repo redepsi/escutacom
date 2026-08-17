@@ -88,8 +88,8 @@ body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f7fb;color:#17203
     </div>
     <form id="loginForm">
       <div class="field">
-        <label for="email">E-mail</label>
-        <input id="email" type="email" autocomplete="username" required>
+        <label for="email">E-mail (coordenação) ou matrícula (estagiário)</label>
+        <input id="email" type="text" autocomplete="username" required>
       </div>
       <div class="field">
         <label for="password">Senha</label>
@@ -97,6 +97,21 @@ body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f7fb;color:#17203
       </div>
       <button id="loginButton" class="btn" type="submit">Entrar</button>
       <div id="loginMessage" class="message"></div>
+      <div style="text-align:center;margin-top:14px">
+        <a href="#" id="forgotPasswordLink" style="font-size:13px;color:#315c8c">Esqueci minha senha</a>
+      </div>
+    </form>
+
+    <form id="forgotPasswordForm" style="display:none">
+      <div class="field">
+        <label for="forgotIdentifier">E-mail (coordenação) ou matrícula (estagiário)</label>
+        <input id="forgotIdentifier" type="text" autocomplete="username" required>
+      </div>
+      <button id="forgotPasswordButton" class="btn" type="submit">Enviar link de redefinição</button>
+      <div id="forgotPasswordMessage" class="message"></div>
+      <div style="text-align:center;margin-top:14px">
+        <a href="#" id="backToLoginLink" style="font-size:13px;color:#315c8c">Voltar para o login</a>
+      </div>
     </form>
   </div>
 </div>
@@ -138,11 +153,25 @@ body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f7fb;color:#17203
           <option value="coordenacao">Coordenação</option>
           <option value="estagiario">Meu perfil de estagiário</option>
         </select>
+        <button id="changePasswordButton" class="action secondary">Alterar senha</button>
         <button id="logoutButton" class="action secondary">Sair</button>
       </div>
     </div>
     <div id="content"></div>
   </main>
+</div>
+
+<div id="changePasswordModal" class="modal-overlay">
+  <div class="modal-box">
+    <h3 style="margin-top:0">Alterar minha senha</h3>
+    <div class="field"><label>Nova senha</label><input id="cpNewPassword1" type="password" autocomplete="new-password" minlength="6"></div>
+    <div class="field"><label>Confirmar nova senha</label><input id="cpNewPassword2" type="password" autocomplete="new-password" minlength="6"></div>
+    <div id="changePasswordMsg" class="message"></div>
+    <div style="display:flex;gap:10px;margin-top:10px">
+      <button id="cpSaveBtn" class="action">Salvar nova senha</button>
+      <button id="cpCloseBtn" class="action secondary">Cancelar</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -201,12 +230,25 @@ loginForm.addEventListener('submit', async (event) => {
   loginButton.textContent = 'Entrando...';
   loginMessage.className = 'message';
 
-  const email = document.getElementById('email').value.trim();
+  const identifier = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value;
-  const { data, error } = await db.auth.signInWithPassword({ email, password });
+
+  let emailToUse = identifier;
+  if (!identifier.includes('@')) {
+    const { data: resolvedEmail, error: lookupError } = await db.rpc('get_email_by_registration', { p_registration: identifier });
+    if (lookupError || !resolvedEmail) {
+      showMessage('Matrícula não encontrada. Confira o número digitado.');
+      loginButton.disabled = false;
+      loginButton.textContent = 'Entrar';
+      return;
+    }
+    emailToUse = resolvedEmail;
+  }
+
+  const { data, error } = await db.auth.signInWithPassword({ email: emailToUse, password });
 
   if (error) {
-    showMessage('Erro ao entrar. Confira e-mail e senha.');
+    showMessage('Erro ao entrar. Confira os dados e a senha.');
     loginButton.disabled = false;
     loginButton.textContent = 'Entrar';
     return;
@@ -222,13 +264,122 @@ loginForm.addEventListener('submit', async (event) => {
   loginButton.textContent = 'Entrar';
 });
 
+// ---------------------------------------------------------------------------
+// ESQUECI MINHA SENHA (a partir da tela de login)
+// ---------------------------------------------------------------------------
+const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+const forgotPasswordButton = document.getElementById('forgotPasswordButton');
+const forgotPasswordMessage = document.getElementById('forgotPasswordMessage');
+
+document.getElementById('forgotPasswordLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  loginForm.style.display = 'none';
+  forgotPasswordForm.style.display = 'block';
+  forgotPasswordMessage.style.display = 'none';
+  document.getElementById('forgotIdentifier').value = document.getElementById('email').value;
+});
+
+document.getElementById('backToLoginLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  forgotPasswordForm.style.display = 'none';
+  loginForm.style.display = 'block';
+});
+
+forgotPasswordForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  forgotPasswordButton.disabled = true;
+  forgotPasswordButton.textContent = 'Enviando...';
+  forgotPasswordMessage.style.display = 'none';
+
+  const identifier = document.getElementById('forgotIdentifier').value.trim();
+  let emailToUse = identifier;
+
+  if (!identifier.includes('@')) {
+    const { data: resolvedEmail, error: lookupError } = await db.rpc('get_email_by_registration', { p_registration: identifier });
+    if (lookupError || !resolvedEmail) {
+      forgotPasswordMessage.textContent = 'Matrícula não encontrada. Confira o número digitado.';
+      forgotPasswordMessage.className = 'message error'; forgotPasswordMessage.style.display = 'block';
+      forgotPasswordButton.disabled = false;
+      forgotPasswordButton.textContent = 'Enviar link de redefinição';
+      return;
+    }
+    emailToUse = resolvedEmail;
+  }
+
+  const { error } = await db.auth.resetPasswordForEmail(emailToUse, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+
+  forgotPasswordButton.disabled = false;
+  forgotPasswordButton.textContent = 'Enviar link de redefinição';
+
+  if (error) {
+    forgotPasswordMessage.textContent = 'Erro ao enviar: ' + error.message;
+    forgotPasswordMessage.className = 'message error';
+  } else {
+    forgotPasswordMessage.textContent = `Se o cadastro existir, um link foi enviado para ${emailToUse}. Confira sua caixa de entrada.`;
+    forgotPasswordMessage.className = 'message success';
+  }
+  forgotPasswordMessage.style.display = 'block';
+});
+
 logoutButton.addEventListener('click', async () => {
   await db.auth.signOut();
   app.style.display = 'none';
   loadingScreen.style.display = 'none';
   loginScreen.style.display = 'flex';
+  loginForm.style.display = 'block';
+  forgotPasswordForm.style.display = 'none';
   loginForm.reset();
   showMessage('Você saiu do sistema.', 'success');
+});
+
+// ---------------------------------------------------------------------------
+// ALTERAR MINHA SENHA (qualquer usuário logado)
+// ---------------------------------------------------------------------------
+const changePasswordModal = document.getElementById('changePasswordModal');
+const changePasswordMsg = document.getElementById('changePasswordMsg');
+
+document.getElementById('changePasswordButton').addEventListener('click', () => {
+  document.getElementById('cpNewPassword1').value = '';
+  document.getElementById('cpNewPassword2').value = '';
+  changePasswordMsg.style.display = 'none';
+  changePasswordModal.style.display = 'flex';
+});
+
+document.getElementById('cpCloseBtn').addEventListener('click', () => {
+  changePasswordModal.style.display = 'none';
+});
+
+document.getElementById('cpSaveBtn').addEventListener('click', async () => {
+  const p1 = document.getElementById('cpNewPassword1').value;
+  const p2 = document.getElementById('cpNewPassword2').value;
+  changePasswordMsg.style.display = 'none';
+
+  if (p1.length < 6) {
+    changePasswordMsg.textContent = 'A senha deve ter no mínimo 6 caracteres.';
+    changePasswordMsg.className = 'message error'; changePasswordMsg.style.display = 'block';
+    return;
+  }
+  if (p1 !== p2) {
+    changePasswordMsg.textContent = 'As senhas não coincidem.';
+    changePasswordMsg.className = 'message error'; changePasswordMsg.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('cpSaveBtn');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+  const { error } = await db.auth.updateUser({ password: p1 });
+  btn.disabled = false; btn.textContent = 'Salvar nova senha';
+
+  if (error) {
+    changePasswordMsg.textContent = 'Erro ao salvar: ' + error.message;
+    changePasswordMsg.className = 'message error'; changePasswordMsg.style.display = 'block';
+    return;
+  }
+
+  changePasswordModal.style.display = 'none';
+  alert('Senha alterada com sucesso.');
 });
 
 // ---------------------------------------------------------------------------
@@ -928,7 +1079,9 @@ async function renderEstagiarios() {
         <button id="sendResetPasswordBtn" type="button" class="action secondary">Enviar link de redefinição de senha</button>
         <div class="muted" style="font-size:12px;margin-top:6px">Envia um e-mail para o estagiário definir uma nova senha.</div>
       </div>
-      <div class="field"><label>Matrícula *</label><input id="fRegistration" placeholder="Matrícula"></div>
+      <div class="field"><label>Matrícula *</label><input id="fRegistration" placeholder="Matrícula">
+        <div class="muted" style="font-size:12px;margin-top:4px">O estagiário pode usar a matrícula para entrar no sistema, além do e-mail.</div>
+      </div>
       <div class="field"><label>WhatsApp *</label><input id="fWhatsapp" placeholder="(85) 99999-9999"></div>
       <div class="field"><label>Semestre *</label><input id="fSemester" type="number" min="1" max="20" placeholder="8"></div>
       <div class="field"><label>Abordagens (opcional)</label><input id="fApproaches" placeholder="Ex.: TCC"></div>
@@ -1343,7 +1496,7 @@ async function renderPacientes() {
     <section id="patientFormPanel" class="panel" style="display:none">
       <div class="toolbar"><h2 id="patientFormTitle">Novo paciente</h2></div>
       <div id="patientFormMsg" class="message"></div>
-      <div class="field"><label>Número de inscrição *</label><input id="pReg" placeholder="Ex.: 00342"></div>
+      <div class="field"><label>Número de inscrição</label><input id="pReg" readonly style="background:#f3f4f6;color:#667085"></div>
       <div class="field"><label>Nome (opcional)</label><input id="pName" placeholder="Nome completo"></div>
       <div class="field"><label>Idade (opcional)</label><input id="pAge" type="number" min="0"></div>
       <div class="field"><label>Gênero (opcional)</label>
@@ -1488,7 +1641,7 @@ async function renderPacientes() {
     originalStatus = null;
     formTitle.textContent = 'Novo paciente';
     msg.style.display = 'none';
-    document.getElementById('pReg').value = '';
+    document.getElementById('pReg').value = 'Gerado automaticamente ao salvar';
     document.getElementById('pName').value = '';
     document.getElementById('pAge').value = '';
     document.getElementById('pGender').value = '';
@@ -1524,20 +1677,26 @@ async function renderPacientes() {
     const btn = document.getElementById('savePatientBtn');
     msg.style.display = 'none';
 
-    const registration = document.getElementById('pReg').value.trim();
     const fullName = document.getElementById('pName').value.trim() || null;
     const ageVal = document.getElementById('pAge').value;
     const age = ageVal ? parseInt(ageVal) : null;
     const gender = document.getElementById('pGender').value || null;
     const status = document.getElementById('pStatus').value;
 
-    if (!registration) {
-      msg.textContent = 'O número de inscrição é obrigatório.';
-      msg.className = 'message error'; msg.style.display = 'block';
-      return;
-    }
-
     btn.disabled = true; btn.textContent = 'Salvando...';
+
+    let registration = editingId ? document.getElementById('pReg').value.trim() : null;
+
+    if (!editingId) {
+      const { data: generatedNumber, error: genError } = await db.rpc('next_patient_registration_number');
+      if (genError || !generatedNumber) {
+        msg.textContent = 'Erro ao gerar número de inscrição: ' + (genError ? genError.message : 'tente novamente.');
+        msg.className = 'message error'; msg.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Salvar paciente';
+        return;
+      }
+      registration = generatedNumber;
+    }
 
     const payload = { registration_number: registration, full_name: fullName, age, gender, status };
 
@@ -2849,6 +3008,8 @@ newPasswordForm.addEventListener('submit', async (event) => {
   await db.auth.signOut();
   newPasswordScreen.style.display = 'none';
   loginScreen.style.display = 'flex';
+  loginForm.style.display = 'block';
+  forgotPasswordForm.style.display = 'none';
   newPasswordForm.reset();
   showMessage('Senha alterada com sucesso. Entre com sua nova senha.', 'success');
 });
