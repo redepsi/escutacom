@@ -68,7 +68,21 @@ body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f7fb;color:#17203
 .spinner{border:3px solid #f3f3f3;border-top:3px solid #315c8c;border-radius:50%;width:30px;height:30px;animation:spin 1s linear infinite;margin:0 auto}
 @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
 
-@media(max-width:850px){.side{display:none}.main{padding:20px}.schedule-grid{grid-template-columns:60px repeat(6,minmax(90px,1fr));font-size:11px}}
+.mobile-menu-btn{display:none;border:0;background:#315c8c;color:#fff;padding:10px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:16px}
+.side-backdrop{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:99}
+.side-backdrop.open{display:block}
+
+@media(max-width:850px){
+  .side{
+    display:block;position:fixed;top:0;left:0;bottom:0;width:240px;
+    transform:translateX(-100%);transition:transform .25s ease;z-index:100;
+    box-shadow:2px 0 16px rgba(0,0,0,.2);overflow-y:auto
+  }
+  .side.open{transform:translateX(0)}
+  .mobile-menu-btn{display:inline-block}
+  .main{padding:20px}
+  .schedule-grid{grid-template-columns:60px repeat(6,minmax(90px,1fr));font-size:11px}
+}
 </style>
 </head>
 <body>
@@ -138,13 +152,15 @@ body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f7fb;color:#17203
 </div>
 
 <div id="app" class="app" style="display:none">
+  <div id="sideBackdrop" class="side-backdrop"></div>
   <aside class="side">
     <div class="logo">Escuta <span>Comunitária</span></div>
     <nav id="nav" class="nav"></nav>
   </aside>
   <main class="main">
     <div class="top">
-      <div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button id="mobileMenuBtn" class="mobile-menu-btn">☰</button>
         <h1 id="pageTitle">Início</h1>
       </div>
       <div class="profile">
@@ -454,12 +470,26 @@ const INTERN_PAGES = [
   { id: 'meu_perfil', label: 'Meu perfil' }
 ];
 
+// ---------------------------------------------------------------------------
+// MENU MÓVEL (gaveta deslizante)
+// ---------------------------------------------------------------------------
+const sideEl = document.querySelector('.side');
+const sideBackdrop = document.getElementById('sideBackdrop');
+const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+
+function openMobileMenu() { sideEl.classList.add('open'); sideBackdrop.classList.add('open'); }
+function closeMobileMenu() { sideEl.classList.remove('open'); sideBackdrop.classList.remove('open'); }
+
+mobileMenuBtn.addEventListener('click', openMobileMenu);
+sideBackdrop.addEventListener('click', closeMobileMenu);
+
 function buildNav() {
   const pages = currentContext === 'coordenacao' ? COORD_PAGES : INTERN_PAGES;
   nav.innerHTML = pages.map(p => `<button data-page="${p.id}">${p.label}</button>`).join('');
   nav.querySelectorAll('button').forEach(btn => {
     btn.addEventListener('click', () => {
       currentPage = btn.dataset.page;
+      closeMobileMenu();
       render();
     });
   });
