@@ -6,6 +6,7 @@
 <meta name="description" content="Projeto Escuta Comunitária">
 <title>Projeto Escuta Comunitária</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f7fb;color:#172033}
@@ -458,6 +459,7 @@ const COORD_PAGES = [
   { id: 'inicio', label: 'Início' },
   { id: 'agenda', label: 'Agenda' },
   { id: 'grade_geral', label: 'Grade Geral' },
+  { id: 'mapa', label: 'Mapa' },
   { id: 'pacientes', label: 'Pacientes' },
   { id: 'estagiarios', label: 'Estagiários' },
   { id: 'relatorios', label: 'Relatórios' },
@@ -504,6 +506,7 @@ function updateActiveNav() {
 // ---------------------------------------------------------------------------
 const PAGE_TITLES = {
   inicio: 'Início', agenda: 'Agenda', grade_geral: 'Grade Geral de Disponibilidade',
+  mapa: 'Mapa de Salas',
   pacientes: 'Pacientes', estagiarios: 'Estagiários', relatorios: 'Relatórios',
   configuracoes: 'Horários', minha_agenda: 'Minha agenda',
   minha_disponibilidade: 'Minha disponibilidade', meu_perfil: 'Meu perfil'
@@ -518,6 +521,7 @@ function render() {
   if (currentPage === 'pacientes') { renderPacientes(); return; }
   if (currentPage === 'minha_disponibilidade') { renderMinhaDisponibilidade(); return; }
   if (currentPage === 'grade_geral') { renderGradeGeral(); return; }
+  if (currentPage === 'mapa') { renderMapa(); return; }
   if (currentPage === 'agenda') { renderAgenda(); return; }
   if (currentPage === 'minha_agenda') { renderMinhaAgenda(); return; }
   if (currentPage === 'meu_perfil') { renderMeuPerfil(); return; }
@@ -534,6 +538,15 @@ function render() {
 // ---------------------------------------------------------------------------
 // PÁGINA: INÍCIO (coordenação e estagiário)
 // ---------------------------------------------------------------------------
+function toMinutes(t) {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function timesOverlap(startA, endA, startB, endB) {
+  return toMinutes(startA) < toMinutes(endB) && toMinutes(startB) < toMinutes(endA);
+}
+
 function dateWithWeekday(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   const wd = WEEKDAYS.find(w => w.n === d.getDay());
@@ -600,7 +613,7 @@ async function renderInicioCoordenacao() {
     db.from('appointments').select('id, appointment_date, start_time, end_time, intern_id, patients(registration_number, full_name)')
       .gt('appointment_date', todayStr).eq('status', 'agendado').order('appointment_date').order('start_time').limit(5),
     db.from('appointments').select('id, appointment_date, start_time, end_time, intern_id, intern_confirmation, patient_confirmation, patients(registration_number, full_name)')
-      .gte('appointment_date', todayStr).lte('appointment_date', monthEndStr).eq('status', 'agendado')
+      .gte('appointment_date', todayStr).lte('appointment_date', monthEndStr).eq('status', 'agendado').eq('is_first_session', true)
       .or('intern_confirmation.eq.aguardando,patient_confirmation.eq.aguardando')
       .order('appointment_date').order('start_time'),
     db.from('appointments').select('id, appointment_date, start_time, end_time, intern_id, patients(registration_number, full_name)')
@@ -664,31 +677,65 @@ async function renderInicioCoordenacao() {
 
 async function loadInternStatsAndActions() {
   const todayStr = toDateStr(new Date());
-  const weekRange = getDateRange('semana', new Date());
-  const weekStartStr = toDateStr(weekRange.start);
-  const weekEndStr = toDateStr(weekRange.end);
 
-  const [{ data: weekAppts }, { count: horasRealizadas }, { data: pendingConf }, { data: pendingAtt }] = await Promise.all([
-    db.from('appointments').select('id, appointment_date, start_time, end_time, intern_confirmation, patients(registration_number, full_name)')
-      .eq('intern_id', currentIntern.id).gte('appointment_date', weekStartStr).lte('appointment_date', weekEndStr).eq('status', 'agendado').order('start_time'),
-    db.from('appointments').select('id', { count: 'exact', head: true })
-      .eq('intern_id', currentIntern.id).eq('attendance_status', 'presente'),
+  const [{ data: pendingConf }, { data: pendingAtt }, { data: activeSeriesList }] = await Promise.all([
     db.from('appointments').select('id, appointment_date, start_time, end_time, patients(registration_number, full_name)')
-      .eq('intern_id', currentIntern.id).gte('appointment_date', todayStr).eq('status', 'agendado').eq('intern_confirmation', 'aguardando')
+      .eq('intern_id', currentIntern.id).gte('appointment_date', todayStr).eq('status', 'agendado').eq('intern_confirmation', 'aguardando').eq('is_first_session', true)
       .order('appointment_date').order('start_time'),
     db.from('appointments').select('id, appointment_date, start_time, end_time, patients(registration_number, full_name)')
       .eq('intern_id', currentIntern.id).lte('appointment_date', todayStr).eq('status', 'agendado').eq('attendance_status', 'pendente')
-      .order('appointment_date')
+      .order('appointment_date'),
+    db.from('appointment_series').select('patient_id, series_start, patients(registration_number, full_name)')
+      .eq('intern_id', currentIntern.id).eq('status', 'ativa')
   ]);
 
-  const total = (weekAppts || []).length;
-  const confirmados = (weekAppts || []).filter(a => a.intern_confirmation === 'confirmado').length;
-  const aguardando = (weekAppts || []).filter(a => a.intern_confirmation === 'aguardando').length;
+  // ---- Cartão(ões) do(s) paciente(s) ativo(s) ----
+  const uniquePatientIds = [...new Set((activeSeriesList || []).map(s => s.patient_id))];
+  const cardsWrap = document.getElementById('inicioCards');
 
-  document.getElementById('inicioCards').innerHTML =
-    statCard('Atendimentos esta semana', total) +
-    statCard('Confirmados', confirmados, '#2f855a') +
-    statCard('Horas realizadas', `${horasRealizadas || 0}h`);
+  if (uniquePatientIds.length === 0) {
+    cardsWrap.style.display = 'block';
+    cardsWrap.innerHTML = `<div class="placeholder">Nenhum paciente ativo no momento.</div>`;
+  } else {
+    const patientCards = await Promise.all(uniquePatientIds.map(async pid => {
+      const seriesForPatient = (activeSeriesList || []).filter(s => s.patient_id === pid);
+      const earliestStart = seriesForPatient.reduce((min, s) => s.series_start < min ? s.series_start : min, seriesForPatient[0].series_start);
+      const p = seriesForPatient[0].patients;
+      const patLabel = p ? `#${p.registration_number} ${p.full_name || ''}` : pid;
+
+      const [{ count: horasRealizadas }, { data: nextAppt }] = await Promise.all([
+        db.from('appointments').select('id', { count: 'exact', head: true })
+          .eq('intern_id', currentIntern.id).eq('patient_id', pid).eq('attendance_status', 'presente'),
+        db.from('appointments').select('appointment_date, start_time')
+          .eq('intern_id', currentIntern.id).eq('patient_id', pid).eq('status', 'agendado')
+          .gte('appointment_date', todayStr).order('appointment_date').order('start_time').limit(1)
+      ]);
+
+      return {
+        pid, patLabel, earliestStart, horasRealizadas: horasRealizadas || 0,
+        nextAppt: nextAppt && nextAppt[0] ? nextAppt[0] : null
+      };
+    }));
+
+    cardsWrap.style.display = 'grid';
+    cardsWrap.style.gridTemplateColumns = `repeat(${Math.min(patientCards.length, 3)}, 1fr)`;
+    cardsWrap.style.gap = '14px';
+
+    cardsWrap.innerHTML = patientCards.map(p => `
+      <div class="panel" style="margin-bottom:0;padding:20px">
+        <div style="font-weight:700;font-size:17px;margin-bottom:4px">${escapeHtml(p.patLabel)}</div>
+        <div class="muted" style="font-size:12px;margin-bottom:14px">Vínculo desde ${fmtBr(p.earliestStart)}</div>
+        <div style="display:flex;gap:24px;margin-bottom:14px">
+          <div><div class="muted" style="font-size:11px">Horas realizadas</div><div style="font-weight:700;font-size:18px">${p.horasRealizadas}h</div></div>
+          <div><div class="muted" style="font-size:11px">Próxima sessão</div><div style="font-weight:700;font-size:14px">${p.nextAppt ? `${dateWithWeekday(p.nextAppt.appointment_date)} ${p.nextAppt.start_time.slice(0,5)}` : '—'}</div></div>
+        </div>
+        <button class="action secondary view-active-patient-ficha" data-id="${p.pid}" style="padding:6px 12px;font-size:12px">Ver ficha</button>
+      </div>`).join('');
+
+    cardsWrap.querySelectorAll('.view-active-patient-ficha').forEach(btn => {
+      btn.addEventListener('click', () => renderPatientFicha(btn.dataset.id, 'minha_agenda'));
+    });
+  }
 
   // Só urgente: confirmação para hoje/amanhã, ou presença atrasada (48h+)
   const urgentConf = (pendingConf || []).filter(a => daysUntil(a.appointment_date) <= 1);
@@ -750,6 +797,45 @@ async function loadInternStatsAndActions() {
 }
 
 // ---------------------------------------------------------------------------
+// BACKUP COMPLETO (Excel com uma aba por tabela)
+// ---------------------------------------------------------------------------
+async function runBackup() {
+  const btn = document.getElementById('backupBtn');
+  const msg = document.getElementById('backupMsg');
+  btn.disabled = true; btn.textContent = 'Gerando backup...';
+  msg.style.display = 'none';
+
+  const tables = [
+    'patients', 'interns', 'profiles', 'clinic_schedule_slots',
+    'intern_availability', 'patient_availability',
+    'appointment_series', 'appointments',
+    'academic_periods', 'intern_supervisor_history'
+  ];
+
+  try {
+    const workbook = XLSX.utils.book_new();
+
+    for (const table of tables) {
+      const { data, error } = await db.from(table).select('*');
+      if (error) throw new Error(`Erro ao ler ${table}: ${error.message}`);
+      const sheet = XLSX.utils.json_to_sheet(data && data.length ? data : [{}]);
+      XLSX.utils.book_append_sheet(workbook, sheet, table.slice(0, 31));
+    }
+
+    const dateStr = toDateStr(new Date());
+    XLSX.writeFile(workbook, `backup_escuta_comunitaria_${dateStr}.xlsx`);
+
+    msg.textContent = 'Backup gerado e baixado com sucesso.';
+    msg.className = 'message success'; msg.style.display = 'block';
+  } catch (err) {
+    msg.textContent = 'Erro ao gerar backup: ' + err.message;
+    msg.className = 'message error'; msg.style.display = 'block';
+  }
+
+  btn.disabled = false; btn.textContent = 'Baixar backup completo';
+}
+
+// ---------------------------------------------------------------------------
 // PÁGINA: CONFIGURAÇÕES (Quadro de horários da clínica)
 // ---------------------------------------------------------------------------
 async function renderConfiguracoes() {
@@ -766,7 +852,20 @@ async function renderConfiguracoes() {
       <div id="scheduleGrid" class="schedule-grid">
         <div style="grid-column:1/-1;padding:20px;text-align:center">Carregando horários...</div>
       </div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div>
+          <h2>Backup</h2>
+          <div class="muted">Baixa uma cópia completa dos dados em uma planilha Excel, com uma aba para cada tabela do sistema.</div>
+        </div>
+        <button id="backupBtn" class="action secondary">Baixar backup completo</button>
+      </div>
+      <div id="backupMsg" class="message"></div>
     </section>`;
+
+  document.getElementById('backupBtn').addEventListener('click', runBackup);
 
   const grid = document.getElementById('scheduleGrid');
   const msg = document.getElementById('scheduleMsg');
@@ -860,6 +959,7 @@ async function renderMeuPerfil() {
         <div><div class="muted" style="font-size:12px">Matrícula</div><div style="font-weight:700">${escapeHtml(currentIntern.registration_number)}</div></div>
         <div><div class="muted" style="font-size:12px">WhatsApp</div><div style="font-weight:700">${waHtml}</div></div>
         <div><div class="muted" style="font-size:12px">Semestre</div><div style="font-weight:700">${currentIntern.current_semester}º</div></div>
+        <div><div class="muted" style="font-size:12px">Supervisor</div><div style="font-weight:700">${escapeHtml(currentIntern.supervisor || '—')}</div></div>
         <div><div class="muted" style="font-size:12px">Status</div><div style="font-weight:700">${currentIntern.status === 'ativo' ? 'Ativo' : 'Inativo'}</div></div>
         <div><div class="muted" style="font-size:12px">Abordagens</div><div style="font-weight:700">${escapeHtml(currentIntern.preferred_approaches || '—')}</div></div>
         <div><div class="muted" style="font-size:12px">Público</div><div style="font-weight:700">${escapeHtml(currentIntern.preferred_audience || '—')}</div></div>
@@ -962,6 +1062,21 @@ async function renderRelatorios() {
     btn.addEventListener('click', () => { reportView = btn.dataset.v; renderForm(); });
   });
 
+async function getSupervisorsForPeriod(internId, startDate, endDate) {
+  const { data } = await db.from('intern_supervisor_history')
+    .select('supervisor, start_date, end_date')
+    .eq('intern_id', internId)
+    .or(`end_date.is.null,end_date.gte.${startDate}`)
+    .lte('start_date', endDate)
+    .order('start_date');
+  return data || [];
+}
+
+function formatSupervisorPeriods(list) {
+  if (!list || list.length === 0) return 'Não informado';
+  return list.map(s => `${escapeHtml(s.supervisor)} (${fmtBr(s.start_date)} a ${s.end_date ? fmtBr(s.end_date) : 'atual'})`).join('; ');
+}
+
   async function generateIndividual() {
     const internId = document.getElementById('repIntern').value;
     const start = document.getElementById('repStart').value;
@@ -972,8 +1087,11 @@ async function renderRelatorios() {
     resultWrap.innerHTML = `<div class="placeholder">Gerando...</div>`;
     const internName = nameById[internId] || '?';
     const m = await computeInternMetrics(internId, start, end);
+    const supervisors = await getSupervisorsForPeriod(internId, start, end);
+    const supervisorsText = formatSupervisorPeriods(supervisors);
 
     const bodyHtml = `
+      <div class="muted" style="margin-bottom:6px">Supervisor(es) no período: <strong>${supervisorsText}</strong></div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0">
         ${statCard('Atendimentos', m.atendimentos)}
         ${statCard('Horas previstas', m.horasPrevistas + 'h')}
@@ -990,6 +1108,7 @@ async function renderRelatorios() {
       const pdfBody = `
         <div class="meta">${escapeHtml(internName)} · ${fmtBr(start)} a ${fmtBr(end)}</div>
         <table>
+          <tr><th>Supervisor(es) no período</th><td>${supervisorsText}</td></tr>
           <tr><th>Atendimentos</th><td>${m.atendimentos}</td></tr>
           <tr><th>Horas previstas</th><td>${m.horasPrevistas}h</td></tr>
           <tr><th>Horas realizadas</th><td>${m.horasRealizadas}h</td></tr>
@@ -1114,6 +1233,8 @@ async function renderEstagiarios() {
       </div>
       <div class="field"><label>WhatsApp *</label><input id="fWhatsapp" placeholder="(85) 99999-9999"></div>
       <div class="field"><label>Semestre *</label><input id="fSemester" type="number" min="1" max="20" placeholder="8"></div>
+      <div class="field"><label>Supervisor *</label><input id="fSupervisor" placeholder="Nome do professor supervisor"></div>
+      <div id="supervisorHistoryWrap" style="display:none;margin:-8px 0 16px"></div>
       <div class="field"><label>Abordagens (opcional)</label><input id="fApproaches" placeholder="Ex.: TCC"></div>
       <div class="field"><label>Público (opcional)</label><input id="fAudience" placeholder="Ex.: Adultos"></div>
       <div class="field"><label>Status</label>
@@ -1227,6 +1348,7 @@ async function renderEstagiarios() {
         <td><strong>${escapeHtml(i.full_name)}</strong><br><small class="muted">${escapeHtml(i.email)}</small></td>
         <td>${escapeHtml(i.registration_number)}</td>
         <td>${waHtml}</td>
+        <td>${escapeHtml(i.supervisor || '—')}</td>
         <td>${semestreCell}</td>
         <td>${statusBadge}</td>
         <td>
@@ -1238,7 +1360,7 @@ async function renderEstagiarios() {
 
     wrap.innerHTML = `<div style="overflow:auto"><table style="width:100%;border-collapse:collapse">
       <tr style="text-align:left;font-size:12px;color:#667085">
-        <th style="padding:10px 8px">Nome / E-mail</th><th>Matrícula</th><th>WhatsApp</th><th>Semestre</th><th>Status</th><th>Ações</th>
+        <th style="padding:10px 8px">Nome / E-mail</th><th>Matrícula</th><th>WhatsApp</th><th>Supervisor</th><th>Semestre</th><th>Status</th><th>Ações</th>
       </tr>${rows}</table></div>`;
 
     wrap.querySelectorAll('.edit-intern').forEach(btn => {
@@ -1279,6 +1401,7 @@ async function renderEstagiarios() {
     formTitle.textContent = 'Novo estagiário';
     loginFields.style.display = 'block';
     document.getElementById('resetPasswordField').style.display = 'none';
+    document.getElementById('supervisorHistoryWrap').style.display = 'none';
     msg.style.display = 'none';
     document.getElementById('fName').value = '';
     document.getElementById('fEmail').value = '';
@@ -1286,12 +1409,13 @@ async function renderEstagiarios() {
     document.getElementById('fRegistration').value = '';
     document.getElementById('fWhatsapp').value = '';
     document.getElementById('fSemester').value = '';
+    document.getElementById('fSupervisor').value = '';
     document.getElementById('fApproaches').value = '';
     document.getElementById('fAudience').value = '';
     document.getElementById('fStatus').value = 'ativo';
   }
 
-  function openForm(intern) {
+  async function openForm(intern) {
     resetForm();
     if (intern) {
       editingId = intern.id;
@@ -1303,9 +1427,24 @@ async function renderEstagiarios() {
       document.getElementById('fRegistration').value = intern.registration_number || '';
       document.getElementById('fWhatsapp').value = intern.whatsapp || '';
       document.getElementById('fSemester').value = intern.current_semester || '';
+      document.getElementById('fSupervisor').value = intern.supervisor || '';
       document.getElementById('fApproaches').value = intern.preferred_approaches || '';
       document.getElementById('fAudience').value = intern.preferred_audience || '';
       document.getElementById('fStatus').value = intern.status || 'ativo';
+
+      const historyWrap = document.getElementById('supervisorHistoryWrap');
+      const { data: history } = await db.from('intern_supervisor_history')
+        .select('supervisor, start_date, end_date')
+        .eq('intern_id', intern.id).order('start_date', { ascending: false });
+
+      if (history && history.length > 0) {
+        historyWrap.innerHTML = `<div class="muted" style="font-size:12px;margin-bottom:4px">Histórico de supervisores:</div>
+          <div style="font-size:12px;color:#475467">${history.map(h => {
+            const period = `${fmtBr(h.start_date)} a ${h.end_date ? fmtBr(h.end_date) : 'atual'}`;
+            return `${escapeHtml(h.supervisor)} <span class="muted">(${period})</span>`;
+          }).join('<br>')}</div>`;
+        historyWrap.style.display = 'block';
+      }
     }
     panel.style.display = 'block';
     panel.scrollIntoView({ behavior: 'smooth' });
@@ -1340,11 +1479,12 @@ async function renderEstagiarios() {
     const registration = document.getElementById('fRegistration').value.trim();
     const whatsapp = document.getElementById('fWhatsapp').value.trim();
     const semester = parseInt(document.getElementById('fSemester').value);
+    const supervisor = document.getElementById('fSupervisor').value.trim();
     const approaches = document.getElementById('fApproaches').value.trim() || null;
     const audience = document.getElementById('fAudience').value.trim() || null;
     const status = document.getElementById('fStatus').value;
 
-    if (!fullName || !registration || !whatsapp || !semester) {
+    if (!fullName || !registration || !whatsapp || !semester || !supervisor) {
       msg.textContent = 'Preencha todos os campos obrigatórios.';
       msg.className = 'message error'; msg.style.display = 'block';
       return;
@@ -1354,9 +1494,12 @@ async function renderEstagiarios() {
 
     if (editingId) {
       // Edição: não mexe em login/e-mail, só nos dados cadastrais
+      const previousIntern = internsCache.find(i => i.id === editingId);
+      const previousSupervisor = previousIntern ? previousIntern.supervisor : null;
+
       const { error: profileErr } = await db.from('profiles').update({ full_name: fullName }).eq('id', editingId);
       const { error: internErr } = await db.from('interns').update({
-        registration_number: registration, whatsapp, current_semester: semester,
+        registration_number: registration, whatsapp, current_semester: semester, supervisor,
         preferred_approaches: approaches, preferred_audience: audience, status
       }).eq('id', editingId);
 
@@ -1365,6 +1508,18 @@ async function renderEstagiarios() {
         msg.className = 'message error'; msg.style.display = 'block';
         btn.disabled = false; btn.textContent = 'Salvar estagiário';
         return;
+      }
+
+      if (supervisor !== previousSupervisor) {
+        const todayStr = toDateStr(new Date());
+        const { data: openEntries } = await db.from('intern_supervisor_history')
+          .select('id').eq('intern_id', editingId).is('end_date', null);
+        if (openEntries && openEntries.length > 0) {
+          await db.from('intern_supervisor_history').update({ end_date: todayStr }).in('id', openEntries.map(e => e.id));
+        }
+        await db.from('intern_supervisor_history').insert([{
+          intern_id: editingId, supervisor, start_date: todayStr, end_date: null
+        }]);
       }
     } else {
       // Criação: precisa de e-mail e senha para gerar o login
@@ -1399,7 +1554,7 @@ async function renderEstagiarios() {
       }
 
       const { error: internErr } = await db.from('interns').insert([{
-        id: newId, registration_number: registration, whatsapp, current_semester: semester,
+        id: newId, registration_number: registration, whatsapp, current_semester: semester, supervisor,
         preferred_approaches: approaches, preferred_audience: audience, email, status
       }]);
       if (internErr) {
@@ -1408,6 +1563,10 @@ async function renderEstagiarios() {
         btn.disabled = false; btn.textContent = 'Salvar estagiário';
         return;
       }
+
+      await db.from('intern_supervisor_history').insert([{
+        intern_id: newId, supervisor, start_date: toDateStr(new Date()), end_date: null
+      }]);
     }
 
     panel.style.display = 'none';
@@ -1502,17 +1661,15 @@ function daysSince(dateStr) {
 // ---------------------------------------------------------------------------
 // PÁGINA: PACIENTES
 // ---------------------------------------------------------------------------
-const GENDER_OPTIONS = [
-  'Mulher cisgênero', 'Homem cisgênero', 'Mulher transgênero', 'Homem transgênero',
-  'Pessoa não binária', 'Outra identidade', 'Prefiro não informar'
-];
-
 async function renderPacientes() {
   content.innerHTML = `
     <section class="panel">
       <div class="toolbar">
         <div><h2>Pacientes</h2><div class="muted">Cadastro, disponibilidade e situação dos pacientes.</div></div>
-        <button id="newPatientBtn" class="action">+ Novo paciente</button>
+        <div style="display:flex;gap:8px">
+          <button id="importPatientsBtn" class="action secondary">Importar planilha</button>
+          <button id="newPatientBtn" class="action">+ Novo paciente</button>
+        </div>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:14px">
         <button class="action secondary situation-filter" data-v="ativos">Ativos</button>
@@ -1523,18 +1680,21 @@ async function renderPacientes() {
       <div id="patientListWrap"><div class="placeholder">Carregando...</div></div>
     </section>
 
+    <section id="importPanel" class="panel" style="display:none">
+      <div class="toolbar"><h2>Importar pacientes de planilha</h2></div>
+      <div class="muted" style="margin-bottom:12px">A planilha deve ter as colunas: <strong>origem</strong>, <strong>nome</strong>, <strong>whatsapp</strong>. A disponibilidade não vem da planilha; cadastre depois de coletar com cada paciente.</div>
+      <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv">
+      <div id="importMsg" class="message"></div>
+      <div id="importPreviewWrap" style="margin-top:14px"></div>
+    </section>
+
     <section id="patientFormPanel" class="panel" style="display:none">
       <div class="toolbar"><h2 id="patientFormTitle">Novo paciente</h2></div>
       <div id="patientFormMsg" class="message"></div>
       <div class="field"><label>Número de inscrição</label><input id="pReg" readonly style="background:#f3f4f6;color:#667085"></div>
       <div class="field"><label>Nome (opcional)</label><input id="pName" placeholder="Nome completo"></div>
-      <div class="field"><label>Idade (opcional)</label><input id="pAge" type="number" min="0"></div>
-      <div class="field"><label>Gênero (opcional)</label>
-        <select id="pGender">
-          <option value="">Não informado</option>
-          ${GENDER_OPTIONS.map(g => `<option value="${g}">${g}</option>`).join('')}
-        </select>
-      </div>
+      <div class="field"><label>WhatsApp (opcional)</label><input id="pWhatsapp" placeholder="(85) 99999-9999"></div>
+      <div class="field"><label>Origem (opcional)</label><input id="pOrigin" placeholder="Ex.: Encaminhado pela UBS X"></div>
       <div class="field"><label>Status</label>
         <select id="pStatus"><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select>
       </div>
@@ -1615,11 +1775,13 @@ async function renderPacientes() {
         : scheduledSet.has(p.id)
           ? `<span style="color:#2f855a;font-weight:700">Agendado</span>`
           : `<span style="color:#9a6700;font-weight:700">Na espera há ${daysSince(p.created_at)} dia(s)</span>`;
+      const wa = whatsappLink(p.whatsapp);
+      const waHtml = wa ? `<a href="${wa}" target="_blank" rel="noopener">${escapeHtml(p.whatsapp)}</a>` : (escapeHtml(p.whatsapp) || '—');
       return `<tr>
         <td><strong>${escapeHtml(p.registration_number)}</strong></td>
         <td>${escapeHtml(p.full_name || '—')}</td>
-        <td>${p.age ?? '—'}</td>
-        <td>${escapeHtml(p.gender || '—')}</td>
+        <td>${waHtml}</td>
+        <td>${escapeHtml(p.origin || '—')}</td>
         <td>${formatAvailabilityBadges(availByPatient[p.id])}</td>
         <td>${situacao}</td>
         <td>${statusBadge}</td>
@@ -1633,7 +1795,7 @@ async function renderPacientes() {
 
     wrap.innerHTML = `<div style="overflow:auto;font-size:13px"><table style="width:100%;border-collapse:collapse;font-size:13px">
       <tr style="text-align:left;font-size:12px;color:#667085">
-        <th style="padding:10px 8px">Inscrição</th><th>Nome</th><th>Idade</th><th>Gênero</th><th>Disponibilidade</th><th>Situação</th><th>Status</th><th>Ações</th>
+        <th style="padding:10px 8px">Inscrição</th><th>Nome</th><th>WhatsApp</th><th>Origem</th><th>Disponibilidade</th><th>Situação</th><th>Status</th><th>Ações</th>
       </tr>${rows}</table></div>`;
 
     wrap.querySelectorAll('.edit-patient').forEach(btn => {
@@ -1644,13 +1806,23 @@ async function renderPacientes() {
     });
     wrap.querySelectorAll('.delete-patient').forEach(btn => {
       btn.addEventListener('click', async () => {
+        const patient = patientsCache.find(p => p.id === btn.dataset.id);
         const { count } = await db.from('appointments').select('id', { count: 'exact', head: true }).eq('patient_id', btn.dataset.id);
+
         if (count && count > 0) {
-          alert('Não é possível excluir: este paciente já teve atendimentos registrados. Mantenha-o inativo para preservar o histórico.');
-          return;
+          const typed = prompt(
+            `Este paciente tem ${count} atendimento(s) registrados. Excluí-lo apaga esse histórico PARA SEMPRE, sem volta.\n\n` +
+            `Para confirmar, digite o número de inscrição dele (${patient.registration_number}):`
+          );
+          if (typed === null) return;
+          if (typed.trim() !== patient.registration_number) {
+            alert('Número não confere. Exclusão cancelada.');
+            return;
+          }
+        } else {
+          if (!confirm('Excluir este paciente definitivamente? Esta ação não pode ser desfeita.')) return;
         }
-        if (!confirm('Excluir este paciente definitivamente? Esta ação não pode ser desfeita.')) return;
-        await db.from('patient_availability').delete().eq('patient_id', btn.dataset.id);
+
         const { error } = await db.from('patients').delete().eq('id', btn.dataset.id);
         if (error) alert('Erro ao excluir: ' + error.message); else loadList();
       });
@@ -1673,8 +1845,8 @@ async function renderPacientes() {
     msg.style.display = 'none';
     document.getElementById('pReg').value = 'Gerado automaticamente ao salvar';
     document.getElementById('pName').value = '';
-    document.getElementById('pAge').value = '';
-    document.getElementById('pGender').value = '';
+    document.getElementById('pWhatsapp').value = '';
+    document.getElementById('pOrigin').value = '';
     document.getElementById('pStatus').value = 'ativo';
     availGridEl.innerHTML = buildAvailabilityGrid(clinicSlotsCache, []);
     bindAvailabilityToggles(availGridEl);
@@ -1688,8 +1860,8 @@ async function renderPacientes() {
       formTitle.textContent = 'Editar paciente';
       document.getElementById('pReg').value = patient.registration_number || '';
       document.getElementById('pName').value = patient.full_name || '';
-      document.getElementById('pAge').value = patient.age ?? '';
-      document.getElementById('pGender').value = patient.gender || '';
+      document.getElementById('pWhatsapp').value = patient.whatsapp || '';
+      document.getElementById('pOrigin').value = patient.origin || '';
       document.getElementById('pStatus').value = patient.status || 'ativo';
 
       const { data: pAvail } = await db.from('patient_availability').select('*').eq('patient_id', patient.id);
@@ -1703,14 +1875,116 @@ async function renderPacientes() {
   document.getElementById('newPatientBtn').addEventListener('click', () => openForm(null));
   document.getElementById('cancelPatientBtn').addEventListener('click', () => { panel.style.display = 'none'; });
 
+  // ---- Importar planilha de pacientes ----
+  const importPanel = document.getElementById('importPanel');
+  const importMsg = document.getElementById('importMsg');
+  const importPreviewWrap = document.getElementById('importPreviewWrap');
+  let importRows = [];
+
+  document.getElementById('importPatientsBtn').addEventListener('click', () => {
+    importPanel.style.display = importPanel.style.display === 'none' ? 'block' : 'none';
+    importMsg.style.display = 'none';
+    importPreviewWrap.innerHTML = '';
+    document.getElementById('importFileInput').value = '';
+    importRows = [];
+  });
+
+  function normalizeHeader(h) {
+    return String(h || '').trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // remove acentos
+  }
+
+  document.getElementById('importFileInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    importMsg.style.display = 'none';
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const workbook = XLSX.read(ev.target.result, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+        importRows = rawRows.map(row => {
+          const mapped = {};
+          Object.keys(row).forEach(key => {
+            const norm = normalizeHeader(key);
+            if (norm === 'origem') mapped.origin = String(row[key]).trim();
+            if (norm === 'nome') mapped.full_name = String(row[key]).trim();
+            if (norm === 'whatsapp') mapped.whatsapp = String(row[key]).trim();
+          });
+          return mapped;
+        }).filter(r => r.full_name || r.whatsapp || r.origin);
+
+        if (importRows.length === 0) {
+          importMsg.textContent = 'Nenhuma linha reconhecida. Confira se as colunas se chamam origem, nome e whatsapp.';
+          importMsg.className = 'message error'; importMsg.style.display = 'block';
+          importPreviewWrap.innerHTML = '';
+          return;
+        }
+
+        const previewRows = importRows.map(r => `<tr>
+          <td>${escapeHtml(r.full_name || '—')}</td>
+          <td>${escapeHtml(r.whatsapp || '—')}</td>
+          <td>${escapeHtml(r.origin || '—')}</td>
+        </tr>`).join('');
+
+        importPreviewWrap.innerHTML = `
+          <div class="muted" style="margin-bottom:8px">${importRows.length} paciente(s) encontrados na planilha:</div>
+          <div style="overflow:auto;max-height:300px">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+              <tr style="text-align:left;font-size:12px;color:#667085"><th>Nome</th><th>WhatsApp</th><th>Origem</th></tr>
+              ${previewRows}
+            </table>
+          </div>
+          <button id="confirmImportBtn" class="action" style="margin-top:12px">Importar ${importRows.length} paciente(s)</button>`;
+
+        document.getElementById('confirmImportBtn').addEventListener('click', runImport);
+      } catch (err) {
+        importMsg.textContent = 'Erro ao ler o arquivo: ' + err.message;
+        importMsg.className = 'message error'; importMsg.style.display = 'block';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
+  async function runImport() {
+    const btn = document.getElementById('confirmImportBtn');
+    btn.disabled = true;
+    let done = 0, failed = 0;
+
+    for (const row of importRows) {
+      btn.textContent = `Importando... (${done + failed}/${importRows.length})`;
+      const { data: generatedNumber, error: genError } = await db.rpc('next_patient_registration_number');
+      if (genError || !generatedNumber) { failed++; continue; }
+
+      const { error: insertError } = await db.from('patients').insert([{
+        registration_number: generatedNumber,
+        full_name: row.full_name || null,
+        whatsapp: row.whatsapp || null,
+        origin: row.origin || null,
+        status: 'ativo'
+      }]);
+      if (insertError) failed++; else done++;
+    }
+
+    importMsg.textContent = `Importação concluída: ${done} paciente(s) importados${failed > 0 ? `, ${failed} com erro` : ''}.`;
+    importMsg.className = failed > 0 ? 'message error' : 'message success';
+    importMsg.style.display = 'block';
+    importPreviewWrap.innerHTML = '';
+    importRows = [];
+    document.getElementById('importFileInput').value = '';
+    await loadList();
+  }
+
   document.getElementById('savePatientBtn').addEventListener('click', async () => {
     const btn = document.getElementById('savePatientBtn');
     msg.style.display = 'none';
 
     const fullName = document.getElementById('pName').value.trim() || null;
-    const ageVal = document.getElementById('pAge').value;
-    const age = ageVal ? parseInt(ageVal) : null;
-    const gender = document.getElementById('pGender').value || null;
+    const whatsapp = document.getElementById('pWhatsapp').value.trim() || null;
+    const origin = document.getElementById('pOrigin').value.trim() || null;
     const status = document.getElementById('pStatus').value;
 
     btn.disabled = true; btn.textContent = 'Salvando...';
@@ -1728,7 +2002,7 @@ async function renderPacientes() {
       registration = generatedNumber;
     }
 
-    const payload = { registration_number: registration, full_name: fullName, age, gender, status };
+    const payload = { registration_number: registration, full_name: fullName, whatsapp, origin, status };
 
     const result = editingId
       ? await db.from('patients').update(payload).eq('id', editingId).select().single()
@@ -1807,7 +2081,8 @@ async function renderPatientFicha(patientId, returnPage = 'pacientes') {
     <section class="panel">
       <button id="backFromFicha" class="action secondary" style="margin-bottom:14px">← Voltar</button>
       <h2 style="margin-top:0">Ficha do paciente #${escapeHtml(patient.registration_number)}</h2>
-      <div class="muted" style="margin-bottom:16px">${escapeHtml(patient.full_name || 'Nome não informado')} ${patient.age ? '· ' + patient.age + ' anos' : ''} ${patient.gender ? '· ' + escapeHtml(patient.gender) : ''}</div>
+      <div class="muted" style="margin-bottom:16px">${escapeHtml(patient.full_name || 'Nome não informado')} ${patient.origin ? '· ' + escapeHtml(patient.origin) : ''}</div>
+      ${patient.whatsapp ? `<div style="margin-bottom:16px">${(() => { const wa = whatsappLink(patient.whatsapp); return wa ? `<a href="${wa}" target="_blank" rel="noopener">${escapeHtml(patient.whatsapp)}</a>` : escapeHtml(patient.whatsapp); })()}</div>` : ''}
 
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
         <div class="panel" style="margin-bottom:0;padding:14px"><div class="muted" style="font-size:12px">Agendados (futuros)</div><strong style="font-size:22px">${totalAgendado}</strong></div>
@@ -1842,9 +2117,7 @@ async function renderMinhaAgenda() {
   }
 
   content.innerHTML = `
-    <div id="inicioCards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px">
-      <div class="placeholder">Carregando...</div>
-    </div>
+    <section class="panel"><h2 style="margin-top:0">Meu(s) paciente(s)</h2><div id="inicioCards"><div class="placeholder">Carregando...</div></div></section>
     <section class="panel"><h2>Ações necessárias</h2><div id="acoesWrap" class="placeholder">Carregando...</div></section>
 
     <section class="panel">
@@ -1895,7 +2168,7 @@ async function renderMinhaAgenda() {
     document.getElementById('iPeriodLabel').textContent = periodLabel(internAgendaView, range);
 
     const { data: appts, error } = await db.from('appointments')
-      .select('id, appointment_date, start_time, end_time, status, intern_confirmation, patient_confirmation, attendance_status, patient_id, patients(registration_number, full_name)')
+      .select('id, appointment_date, start_time, end_time, status, intern_confirmation, patient_confirmation, attendance_status, patient_id, room, is_first_session, patients(registration_number, full_name)')
       .eq('intern_id', currentIntern.id)
       .gte('appointment_date', toDateStr(range.start))
       .lte('appointment_date', toDateStr(range.end))
@@ -1923,16 +2196,35 @@ async function renderMinhaAgenda() {
         const isCancelled = a.status === 'cancelado';
         const isPast = date <= todayStr;
 
-        const pc = a.patient_confirmation;
-        const pcColor = pc === 'confirmado' ? '#2f855a' : pc === 'nao_confirmado' ? '#b42318' : '#9a6700';
-        const pcLabel = { aguardando: 'Aguardando', confirmado: 'Confirmado', nao_confirmado: 'Não confirmado' }[pc];
-        const patCell = `${escapeHtml(patLabel)}${isCancelled ? '' : `<br><span style="font-size:11px;color:${pcColor}">Paciente: ${pcLabel}</span>`}`;
+        let patCell = escapeHtml(patLabel);
+        if (!isCancelled && a.is_first_session) {
+          const pc = a.patient_confirmation;
+          const pcColor = pc === 'confirmado' ? '#2f855a' : pc === 'nao_confirmado' ? '#b42318' : '#9a6700';
+          const pcLabel = { aguardando: 'Aguardando', confirmado: 'Confirmado', nao_confirmado: 'Não confirmado' }[pc];
+          patCell += `<br><span style="font-size:11px;color:${pcColor}">Paciente: ${pcLabel}</span>`;
+        }
 
         let confCell, presCell;
 
         if (isCancelled) {
           confCell = `<span style="color:#b42318;font-weight:700">Cancelado</span>`;
           presCell = '—';
+        } else if (!a.is_first_session) {
+          // Só o 1º atendimento da série exige confirmação registrada no sistema;
+          // nas sessões seguintes, o combinado é direto entre estagiário e paciente.
+          confCell = `<span class="muted" style="font-size:12px">Combinado com o paciente</span>`;
+
+          const att = a.attendance_status;
+          if (!isPast) {
+            presCell = `<span class="muted" style="font-size:12px">Disponível no dia</span>`;
+          } else {
+            let style, label;
+            if (att === 'presente') { style = 'background:#e9f7ef;color:#176b36;border:1px solid #bce3cc'; label = '✓ Compareceu'; }
+            else if (att === 'ausente') { style = 'background:#fdecec;color:#b42318;border:1px solid #f3c6c6'; label = '✗ Não compareceu'; }
+            else { style = 'background:#f3f4f6;color:#475467;border:1px solid #e5e7eb'; label = 'Marcar presença'; }
+            presCell = `<button class="toggle-presence" data-id="${a.id}" data-current="${att}"
+              style="${style};font-weight:700;padding:7px 12px;border-radius:8px;font-size:12px;cursor:pointer;border-width:1px;border-style:solid">${label}</button>`;
+          }
         } else {
           // Confirmação: editável antes do dia do atendimento; só leitura depois
           const conf = a.intern_confirmation;
@@ -1963,8 +2255,10 @@ async function renderMinhaAgenda() {
           }
         }
 
+        const horarioCell = `${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}${a.room ? `<br><small class="muted">${escapeHtml(a.room)}</small>` : ''}`;
+
         html += `<tr style="${isCancelled ? 'opacity:.5;text-decoration:line-through' : ''}">
-          <td style="padding:6px 8px">${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}</td>
+          <td style="padding:6px 8px">${horarioCell}</td>
           <td style="text-align:left">${patCell}</td>
           <td>${confCell}</td>
           <td>${presCell}</td>
@@ -2289,6 +2583,192 @@ function showAttendanceModal(appointmentId, onDone, initialStatus = 'presente') 
 }
 
 // ---------------------------------------------------------------------------
+// PÁGINA: MAPA DE SALAS
+// ---------------------------------------------------------------------------
+let mapaAnchorDate = new Date();
+let mapaView = 'dia';
+
+async function renderMapa() {
+  content.innerHTML = `
+    <section class="panel">
+      <div class="toolbar">
+        <div><h2>Salas de atendimento</h2><div class="muted">Cadastre as salas disponíveis na clínica.</div></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
+        <div class="field" style="margin-bottom:0"><label>Nova sala</label><input id="newRoomName" placeholder="Ex.: Sala 3"></div>
+        <button id="addRoomBtn" class="action">+ Adicionar sala</button>
+      </div>
+      <div id="roomsMsg" class="message"></div>
+      <div id="roomsListWrap"><div class="placeholder">Carregando...</div></div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div><h2>Quem está em cada sala</h2><div class="muted">Veja os atendimentos agendados por sala em um dia específico.</div></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+        <div style="display:flex;gap:4px">
+          <button class="action secondary mapa-view-btn" data-v="dia">Dia</button>
+          <button class="action secondary mapa-view-btn" data-v="semana">Semana</button>
+        </div>
+        <button id="mapaPrevDay" class="action secondary">◀</button>
+        <div id="mapaDayLabel" style="font-weight:700;min-width:200px;text-align:center"></div>
+        <button id="mapaNextDay" class="action secondary">▶</button>
+        <button id="mapaTodayBtn" class="action secondary">Hoje</button>
+      </div>
+      <div id="mapaGridWrap"><div class="placeholder">Carregando...</div></div>
+    </section>`;
+
+  const roomsMsg = document.getElementById('roomsMsg');
+
+  async function loadRooms() {
+    const { data: rooms, error } = await db.from('rooms').select('*').order('name');
+    const wrap = document.getElementById('roomsListWrap');
+    if (error) { wrap.innerHTML = `<div class="message error" style="display:block">Erro: ${escapeHtml(error.message)}</div>`; return []; }
+    if (!rooms || rooms.length === 0) {
+      wrap.innerHTML = `<div class="placeholder">Nenhuma sala cadastrada ainda.</div>`;
+      return [];
+    }
+    wrap.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px">` + rooms.map(r => `
+      <div style="display:flex;align-items:center;gap:8px;background:#f8fafc;border:1px solid #e5e9ef;padding:8px 12px;border-radius:999px">
+        <strong style="font-size:13px">${escapeHtml(r.name)}</strong>
+        <button class="delete-room" data-id="${r.id}" style="border:0;background:none;color:#b42318;cursor:pointer;font-size:13px">✕</button>
+      </div>`).join('') + `</div>`;
+
+    wrap.querySelectorAll('.delete-room').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Excluir esta sala? Atendimentos já vinculados a ela mantêm o nome salvo, mas ela sairá da lista de opções.')) return;
+        const { error: delError } = await db.from('rooms').delete().eq('id', btn.dataset.id);
+        if (delError) alert('Erro ao excluir: ' + delError.message); else { await loadRooms(); await loadMapaGrid(); }
+      });
+    });
+    return rooms;
+  }
+
+  document.getElementById('addRoomBtn').addEventListener('click', async () => {
+    const input = document.getElementById('newRoomName');
+    const name = input.value.trim();
+    roomsMsg.style.display = 'none';
+    if (!name) return;
+    const { error } = await db.from('rooms').insert([{ name }]);
+    if (error) {
+      roomsMsg.textContent = 'Erro ao adicionar: ' + error.message;
+      roomsMsg.className = 'message error'; roomsMsg.style.display = 'block';
+      return;
+    }
+    input.value = '';
+    await loadRooms();
+    await loadMapaGrid();
+  });
+
+  document.querySelectorAll('.mapa-view-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.v === mapaView);
+    btn.addEventListener('click', () => {
+      mapaView = btn.dataset.v;
+      document.querySelectorAll('.mapa-view-btn').forEach(b => b.classList.toggle('active', b.dataset.v === mapaView));
+      loadMapaGrid();
+    });
+  });
+
+  document.getElementById('mapaPrevDay').addEventListener('click', () => {
+    mapaAnchorDate.setDate(mapaAnchorDate.getDate() - (mapaView === 'semana' ? 7 : 1));
+    loadMapaGrid();
+  });
+  document.getElementById('mapaNextDay').addEventListener('click', () => {
+    mapaAnchorDate.setDate(mapaAnchorDate.getDate() + (mapaView === 'semana' ? 7 : 1));
+    loadMapaGrid();
+  });
+  document.getElementById('mapaTodayBtn').addEventListener('click', () => { mapaAnchorDate = new Date(); loadMapaGrid(); });
+
+  async function loadMapaGrid() {
+    const gridWrap = document.getElementById('mapaGridWrap');
+
+    let rangeStart, rangeEnd;
+    if (mapaView === 'semana') {
+      const range = getDateRange('semana', mapaAnchorDate);
+      rangeStart = range.start; rangeEnd = range.end;
+      document.getElementById('mapaDayLabel').textContent = `${fmtBr(toDateStr(range.start))} a ${fmtBr(toDateStr(range.end))}`;
+    } else {
+      rangeStart = rangeEnd = new Date(mapaAnchorDate);
+      document.getElementById('mapaDayLabel').textContent = dateWithWeekday(toDateStr(mapaAnchorDate));
+    }
+    const startStr = toDateStr(rangeStart), endStr = toDateStr(rangeEnd);
+
+    const [{ data: rooms }, { data: clinicSlots }, { data: appts }] = await Promise.all([
+      db.from('rooms').select('*').order('name'),
+      db.from('clinic_schedule_slots').select('*').eq('enabled', true),
+      db.from('appointments').select('appointment_date, start_time, end_time, room, patient_id, intern_id, status, patients(registration_number, full_name)')
+        .gte('appointment_date', startStr).lte('appointment_date', endStr).eq('status', 'agendado')
+    ]);
+
+    if (!rooms || rooms.length === 0) {
+      gridWrap.innerHTML = `<div class="placeholder">Cadastre ao menos uma sala acima para ver o mapa.</div>`;
+      return;
+    }
+
+    const internIds = [...new Set((appts || []).map(a => a.intern_id))];
+    const { data: profiles } = internIds.length ? await db.from('profiles').select('id, full_name').in('id', internIds) : { data: [] };
+    const nameById = {};
+    (profiles || []).forEach(p => { nameById[p.id] = p.full_name; });
+
+    function buildDayTable(dateStr) {
+      const weekday = new Date(dateStr + 'T00:00:00').getDay();
+      const daySlots = (clinicSlots || []).filter(s => s.weekday === weekday);
+      const times = [...new Set(daySlots.map(s => s.start_time.slice(0, 5)))].sort();
+      if (times.length === 0) return `<div class="placeholder" style="text-align:left;padding:12px 0">Nenhum horário liberado pela clínica neste dia da semana.</div>`;
+
+      const dayAppts = (appts || []).filter(a => a.appointment_date === dateStr);
+      const withRoom = dayAppts.filter(a => a.room);
+      const withoutRoom = dayAppts.filter(a => !a.room);
+
+      let html = `<div style="overflow:auto"><table style="min-width:${200 + rooms.length * 180}px;border-collapse:collapse;width:100%">
+        <tr style="text-align:left;font-size:12px;color:#667085">
+          <th style="padding:8px">Horário</th>${rooms.map(r => `<th>${escapeHtml(r.name)}</th>`).join('')}
+        </tr>`;
+
+      times.forEach(time => {
+        html += `<tr style="border-top:1px solid #eef0f3"><td style="padding:8px;font-weight:700;white-space:nowrap">${time}h</td>`;
+        rooms.forEach(room => {
+          const match = withRoom.find(a => a.room === room.name && a.start_time.slice(0, 5) === time);
+          if (!match) { html += `<td style="padding:8px;color:#c3c9d3;font-size:12px">—</td>`; return; }
+          const patLabel = match.patients ? `#${match.patients.registration_number} ${match.patients.full_name || ''}` : '—';
+          html += `<td style="padding:8px;background:#f4f7fb;font-size:12px">
+            <strong>${escapeHtml(patLabel)}</strong><br><span class="muted">${escapeHtml(nameById[match.intern_id] || '?')}</span>
+          </td>`;
+        });
+        html += `</tr>`;
+      });
+      html += `</table></div>`;
+
+      if (withoutRoom.length > 0) {
+        html += `<div style="margin-top:10px;padding:10px;background:#fff5d8;border-radius:8px;font-size:12px">
+          <strong>${withoutRoom.length} atendimento(s) sem sala definida.</strong> Edite o agendamento na Agenda para atribuir uma sala.
+        </div>`;
+      }
+      return html;
+    }
+
+    let html;
+    if (mapaView === 'dia') {
+      html = buildDayTable(startStr);
+    } else {
+      html = '';
+      let curr = new Date(rangeStart);
+      while (curr <= rangeEnd) {
+        const dStr = toDateStr(curr);
+        html += `<div style="margin:20px 0 8px;font-weight:700;text-transform:capitalize">${dateWithWeekday(dStr)}</div>` + buildDayTable(dStr);
+        curr.setDate(curr.getDate() + 1);
+      }
+    }
+
+    gridWrap.innerHTML = html;
+  }
+
+  await loadRooms();
+  await loadMapaGrid();
+}
+
+// ---------------------------------------------------------------------------
 // AGENDA E AGENDAMENTO
 // ---------------------------------------------------------------------------
 let agendaView = 'semana';    // 'dia' | 'semana' | 'mes'
@@ -2363,6 +2843,7 @@ async function renderAgenda() {
       <div class="field"><label>Dia e horário *</label><select id="fSlot" disabled><option value="">Escolha o estagiário primeiro</option></select></div>
       <div class="field"><label>Data de início *</label><input type="date" id="fStartDate"></div>
       <div class="field"><label>Data de término *</label><input type="date" id="fEndDate"></div>
+      <div class="field"><label>Sala (opcional)</label><select id="fRoom"><option value="">Nenhuma</option></select></div>
 
       <div id="apptPreviewBox" style="margin-top:14px;padding:14px;background:#f4f7fb;border-radius:10px">
         <strong>Prévia:</strong>
@@ -2401,6 +2882,7 @@ async function renderAgenda() {
         <div id="editSeriesMsg" class="message"></div>
         <div class="field"><label>Dia e horário</label><select id="editSeriesSlot"><option value="">Carregando...</option></select></div>
         <div class="field"><label>Data de término</label><input type="date" id="editSeriesEndDate"></div>
+        <div class="field"><label>Sala (opcional)</label><select id="editSeriesRoom"><option value="">Nenhuma</option></select></div>
         <div class="muted" style="font-size:12px;margin-bottom:10px">
           Atendimentos já realizados, ausentes ou cancelados não são alterados. Apenas os atendimentos futuros ainda pendentes serão recriados conforme as novas configurações.
         </div>
@@ -2434,6 +2916,9 @@ async function renderAgenda() {
   const { data: allInternAvail } = internIds.length
     ? await db.from('intern_availability').select('*').in('intern_id', internIds)
     : { data: [] };
+  const { data: roomsList } = await db.from('rooms').select('*').order('name');
+  document.getElementById('fRoom').innerHTML = '<option value="">Nenhuma</option>' +
+    (roomsList || []).map(r => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
 
   // ---- Filtros da listagem ----
   const filterIntern = document.getElementById('filterIntern');
@@ -2484,23 +2969,27 @@ async function renderAgenda() {
       internCell = `<div style="text-align:left">${escapeHtml(internName)}</div>`;
       presCell = '—';
     } else {
-      const cp = a.patient_confirmation;
-      let cpStyle, cpLabel;
-      if (cp === 'confirmado') { cpStyle = 'background:#e9f7ef;color:#176b36;border:1px solid #bce3cc'; cpLabel = '✓ Confirmado'; }
-      else if (cp === 'nao_confirmado') { cpStyle = 'background:#fdecec;color:#b42318;border:1px solid #f3c6c6'; cpLabel = '✗ Não confirmado'; }
-      else { cpStyle = 'background:#f3f4f6;color:#475467;border:1px solid #e5e7eb'; cpLabel = 'Confirmar'; }
-      patCell = `<div style="text-align:left">${escapeHtml(patLabel)}</div>
-        <button class="toggle-conf-patient" data-id="${a.id}" data-current="${cp}"
+      patCell = `<div style="text-align:left">${escapeHtml(patLabel)}</div>`;
+      internCell = `<div style="text-align:left">${escapeHtml(internName)}</div>`;
+
+      // Confirmação só é cobrada no primeiro atendimento da série
+      if (a.is_first_session) {
+        const cp = a.patient_confirmation;
+        let cpStyle, cpLabel;
+        if (cp === 'confirmado') { cpStyle = 'background:#e9f7ef;color:#176b36;border:1px solid #bce3cc'; cpLabel = '✓ Confirmado'; }
+        else if (cp === 'nao_confirmado') { cpStyle = 'background:#fdecec;color:#b42318;border:1px solid #f3c6c6'; cpLabel = '✗ Não confirmado'; }
+        else { cpStyle = 'background:#f3f4f6;color:#475467;border:1px solid #e5e7eb'; cpLabel = 'Confirmar'; }
+        patCell += `<br><button class="toggle-conf-patient" data-id="${a.id}" data-current="${cp}"
           style="${cpStyle};font-weight:700;padding:4px 9px;border-radius:8px;font-size:11px;cursor:pointer;margin-top:4px">${cpLabel}</button>`;
 
-      const ci = a.intern_confirmation;
-      let ciStyle, ciLabel;
-      if (ci === 'confirmado') { ciStyle = 'background:#e9f7ef;color:#176b36;border:1px solid #bce3cc'; ciLabel = '✓ Confirmado'; }
-      else if (ci === 'nao_confirmado') { ciStyle = 'background:#fdecec;color:#b42318;border:1px solid #f3c6c6'; ciLabel = '✗ Não confirmado'; }
-      else { ciStyle = 'background:#f3f4f6;color:#475467;border:1px solid #e5e7eb'; ciLabel = 'Confirmar'; }
-      internCell = `<div style="text-align:left">${escapeHtml(internName)}</div>
-        <button class="toggle-conf-intern" data-id="${a.id}" data-current="${ci}"
+        const ci = a.intern_confirmation;
+        let ciStyle, ciLabel;
+        if (ci === 'confirmado') { ciStyle = 'background:#e9f7ef;color:#176b36;border:1px solid #bce3cc'; ciLabel = '✓ Confirmado'; }
+        else if (ci === 'nao_confirmado') { ciStyle = 'background:#fdecec;color:#b42318;border:1px solid #f3c6c6'; ciLabel = '✗ Não confirmado'; }
+        else { ciStyle = 'background:#f3f4f6;color:#475467;border:1px solid #e5e7eb'; ciLabel = 'Confirmar'; }
+        internCell += `<br><button class="toggle-conf-intern" data-id="${a.id}" data-current="${ci}"
           style="${ciStyle};font-weight:700;padding:4px 9px;border-radius:8px;font-size:11px;cursor:pointer;margin-top:4px">${ciLabel}</button>`;
+      }
 
       if (!isPast) {
         presCell = `<span class="muted" style="font-size:12px">Disponível no dia</span>`;
@@ -2523,8 +3012,10 @@ async function renderAgenda() {
       : `<button class="action secondary edit-series-btn" data-series-id="${a.series_id}" style="padding:4px 8px;font-size:12px">Editar</button>
          <button class="action secondary cancel-appt" data-id="${a.id}" style="padding:4px 8px;font-size:12px;color:#b42318">Cancelar</button>`;
 
+    const horarioCell = `${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}${a.room ? `<br><small class="muted">${escapeHtml(a.room)}</small>` : ''}`;
+
     return `<tr style="${isCancelled ? 'opacity:.6' : ''}">
-      <td style="padding:6px 8px">${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}</td>
+      <td style="padding:6px 8px">${horarioCell}</td>
       <td>${patCell}</td>
       <td>${internCell}</td>
       <td>${presCell}</td>
@@ -2557,7 +3048,7 @@ async function renderAgenda() {
     document.getElementById('periodLabel').textContent = periodLabel(agendaView, range);
 
     let query = db.from('appointments')
-      .select('id, series_id, appointment_date, start_time, end_time, status, intern_confirmation, patient_confirmation, attendance_status, cancelled_by, cancellation_reason, patient_id, intern_id, patients(registration_number, full_name)')
+      .select('id, series_id, appointment_date, start_time, end_time, status, intern_confirmation, patient_confirmation, attendance_status, cancelled_by, cancellation_reason, patient_id, intern_id, room, is_first_session, patients(registration_number, full_name)')
       .gte('appointment_date', toDateStr(range.start))
       .lte('appointment_date', toDateStr(range.end))
       .order('appointment_date').order('start_time');
@@ -2703,6 +3194,10 @@ async function renderAgenda() {
         }
 
         editEndDate.value = series.series_end;
+        const editRoomSelect = document.getElementById('editSeriesRoom');
+        editRoomSelect.innerHTML = '<option value="">Nenhuma</option>' +
+          (roomsList || []).map(r => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
+        editRoomSelect.value = series.room || '';
       });
     });
 
@@ -2714,6 +3209,7 @@ async function renderAgenda() {
 
       const slotVal = editSlotSelect.value;
       const newEndDate = editEndDate.value;
+      const newRoom = document.getElementById('editSeriesRoom').value.trim() || null;
       if (!slotVal || !newEndDate) {
         editMsg.textContent = 'Selecione o horário e a data de término.';
         editMsg.className = 'message error'; editMsg.style.display = 'block';
@@ -2740,14 +3236,15 @@ async function renderAgenda() {
 
       if (newDates.length > 0) {
         const { data: conflicts } = await db.from('appointments')
-          .select('appointment_date, intern_id, patient_id, series_id')
-          .in('appointment_date', newDates).eq('start_time', newStart).eq('status', 'agendado');
+          .select('appointment_date, start_time, end_time, intern_id, patient_id, series_id')
+          .in('appointment_date', newDates).eq('status', 'agendado');
 
         const hasConflict = (conflicts || []).some(c => c.series_id !== editingSeries.id &&
-          (c.intern_id === editingSeries.intern_id || c.patient_id === editingSeries.patient_id));
+          (c.intern_id === editingSeries.intern_id || c.patient_id === editingSeries.patient_id) &&
+          timesOverlap(c.start_time, c.end_time, newStart, newEnd));
 
         if (hasConflict) {
-          editMsg.textContent = 'Conflito: o estagiário ou o paciente já têm atendimento em pelo menos uma dessas datas/horário.';
+          editMsg.textContent = 'Conflito: o estagiário ou o paciente já têm atendimento em horário sobreposto em pelo menos uma dessas datas.';
           editMsg.className = 'message error'; editMsg.style.display = 'block';
           btn.disabled = false; btn.textContent = 'Salvar alterações';
           return;
@@ -2766,13 +3263,13 @@ async function renderAgenda() {
       }
 
       await db.from('appointment_series').update({
-        weekday: newWeekday, start_time: newStart, end_time: newEnd, series_end: newEndDate
+        weekday: newWeekday, start_time: newStart, end_time: newEnd, series_end: newEndDate, room: newRoom
       }).eq('id', editingSeries.id);
 
       if (newDates.length > 0) {
         const newAppts = newDates.map(d => ({
           series_id: editingSeries.id, patient_id: editingSeries.patient_id, intern_id: editingSeries.intern_id,
-          appointment_date: d, start_time: newStart, end_time: newEnd
+          appointment_date: d, start_time: newStart, end_time: newEnd, room: newRoom, is_first_session: false
         }));
         await db.from('appointments').insert(newAppts);
       }
@@ -2800,7 +3297,7 @@ async function renderAgenda() {
     msg.style.display = 'none';
     fPatient.value = ''; fIntern.innerHTML = '<option value="">Escolha o paciente primeiro</option>'; fIntern.disabled = true;
     fSlot.innerHTML = '<option value="">Escolha o estagiário primeiro</option>'; fSlot.disabled = true;
-    fStartDate.value = ''; fEndDate.value = '';
+    fStartDate.value = ''; fEndDate.value = ''; document.getElementById('fRoom').value = '';
     previewText.textContent = 'Preencha os campos acima.';
     confirmBtn.disabled = true;
   }
@@ -2919,13 +3416,17 @@ async function renderAgenda() {
 
     const dateStrings = generatedDates.map(toDateStr);
     const { data: conflicts } = await db.from('appointments')
-      .select('appointment_date, intern_id, patient_id')
+      .select('appointment_date, start_time, end_time, intern_id, patient_id')
       .in('appointment_date', dateStrings)
-      .eq('start_time', startTime)
       .eq('status', 'agendado');
 
-    if (conflicts && conflicts.some(c => c.intern_id === internId || c.patient_id === patientId)) {
-      msg.textContent = 'Conflito: o estagiário ou o paciente já possuem atendimento em pelo menos uma dessas datas/horário.';
+    const hasConflict = (conflicts || []).some(c =>
+      (c.intern_id === internId || c.patient_id === patientId) &&
+      timesOverlap(c.start_time, c.end_time, startTime, endTime)
+    );
+
+    if (hasConflict) {
+      msg.textContent = 'Conflito: o estagiário ou o paciente já possuem atendimento em horário sobreposto em pelo menos uma dessas datas.';
       msg.className = 'message error'; msg.style.display = 'block';
       return;
     }
@@ -2937,10 +3438,11 @@ async function renderAgenda() {
 
     confirmBtn.onclick = async () => {
       confirmBtn.disabled = true; confirmBtn.textContent = 'Criando...';
+      const room = document.getElementById('fRoom').value.trim() || null;
 
       const { data: series, error: seriesErr } = await db.from('appointment_series').insert([{
         patient_id: patientId, intern_id: internId, weekday, start_time: startTime, end_time: endTime,
-        series_start: startDateStr, series_end: endDateStr, status: 'ativa', created_by: currentProfile.id
+        series_start: startDateStr, series_end: endDateStr, status: 'ativa', created_by: currentProfile.id, room
       }]).select().single();
 
       if (seriesErr) {
@@ -2950,9 +3452,10 @@ async function renderAgenda() {
         return;
       }
 
-      const newAppts = generatedDates.map(d => ({
+      const newAppts = generatedDates.map((d, idx) => ({
         series_id: series.id, patient_id: patientId, intern_id: internId,
-        appointment_date: toDateStr(d), start_time: startTime, end_time: endTime
+        appointment_date: toDateStr(d), start_time: startTime, end_time: endTime,
+        room, is_first_session: idx === 0
       }));
 
       const { error: apptsErr } = await db.from('appointments').insert(newAppts);
