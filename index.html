@@ -1695,6 +1695,7 @@ async function renderPacientes() {
       <div class="field"><label>Nome (opcional)</label><input id="pName" placeholder="Nome completo"></div>
       <div class="field"><label>WhatsApp (opcional)</label><input id="pWhatsapp" placeholder="(85) 99999-9999"></div>
       <div class="field"><label>Origem (opcional)</label><input id="pOrigin" placeholder="Ex.: Encaminhado pela UBS X"></div>
+      <div class="field"><label>Observações (opcional)</label><textarea id="pNotes" rows="3" placeholder="Ex.: Número incorreto, tentar novamente contato" style="width:100%;padding:12px;border:1px solid #d5dbe4;border-radius:9px;font-size:14px;font-family:inherit;resize:vertical"></textarea></div>
       <div class="field"><label>Status</label>
         <select id="pStatus"><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select>
       </div>
@@ -1777,9 +1778,10 @@ async function renderPacientes() {
           : `<span style="color:#9a6700;font-weight:700">Na espera há ${daysSince(p.created_at)} dia(s)</span>`;
       const wa = whatsappLink(p.whatsapp);
       const waHtml = wa ? `<a href="${wa}" target="_blank" rel="noopener">${escapeHtml(p.whatsapp)}</a>` : (escapeHtml(p.whatsapp) || '—');
+      const notesIcon = p.notes ? `<span title="${escapeHtml(p.notes)}" style="cursor:help">📝</span>` : '';
       return `<tr>
         <td><strong>${escapeHtml(p.registration_number)}</strong></td>
-        <td>${escapeHtml(p.full_name || '—')}</td>
+        <td>${escapeHtml(p.full_name || '—')} ${notesIcon}</td>
         <td>${waHtml}</td>
         <td>${escapeHtml(p.origin || '—')}</td>
         <td>${formatAvailabilityBadges(availByPatient[p.id])}</td>
@@ -1847,6 +1849,7 @@ async function renderPacientes() {
     document.getElementById('pName').value = '';
     document.getElementById('pWhatsapp').value = '';
     document.getElementById('pOrigin').value = '';
+    document.getElementById('pNotes').value = '';
     document.getElementById('pStatus').value = 'ativo';
     availGridEl.innerHTML = buildAvailabilityGrid(clinicSlotsCache, []);
     bindAvailabilityToggles(availGridEl);
@@ -1862,6 +1865,7 @@ async function renderPacientes() {
       document.getElementById('pName').value = patient.full_name || '';
       document.getElementById('pWhatsapp').value = patient.whatsapp || '';
       document.getElementById('pOrigin').value = patient.origin || '';
+      document.getElementById('pNotes').value = patient.notes || '';
       document.getElementById('pStatus').value = patient.status || 'ativo';
 
       const { data: pAvail } = await db.from('patient_availability').select('*').eq('patient_id', patient.id);
@@ -1985,6 +1989,7 @@ async function renderPacientes() {
     const fullName = document.getElementById('pName').value.trim() || null;
     const whatsapp = document.getElementById('pWhatsapp').value.trim() || null;
     const origin = document.getElementById('pOrigin').value.trim() || null;
+    const notes = document.getElementById('pNotes').value.trim() || null;
     const status = document.getElementById('pStatus').value;
 
     btn.disabled = true; btn.textContent = 'Salvando...';
@@ -2002,7 +2007,7 @@ async function renderPacientes() {
       registration = generatedNumber;
     }
 
-    const payload = { registration_number: registration, full_name: fullName, whatsapp, origin, status };
+    const payload = { registration_number: registration, full_name: fullName, whatsapp, origin, notes, status };
 
     const result = editingId
       ? await db.from('patients').update(payload).eq('id', editingId).select().single()
@@ -2083,6 +2088,7 @@ async function renderPatientFicha(patientId, returnPage = 'pacientes') {
       <h2 style="margin-top:0">Ficha do paciente #${escapeHtml(patient.registration_number)}</h2>
       <div class="muted" style="margin-bottom:16px">${escapeHtml(patient.full_name || 'Nome não informado')} ${patient.origin ? '· ' + escapeHtml(patient.origin) : ''}</div>
       ${patient.whatsapp ? `<div style="margin-bottom:16px">${(() => { const wa = whatsappLink(patient.whatsapp); return wa ? `<a href="${wa}" target="_blank" rel="noopener">${escapeHtml(patient.whatsapp)}</a>` : escapeHtml(patient.whatsapp); })()}</div>` : ''}
+      ${patient.notes ? `<div style="margin-bottom:16px;padding:12px;background:#fff5d8;border-radius:8px;font-size:13px"><strong>Observações:</strong> ${escapeHtml(patient.notes)}</div>` : ''}
 
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
         <div class="panel" style="margin-bottom:0;padding:14px"><div class="muted" style="font-size:12px">Agendados (futuros)</div><strong style="font-size:22px">${totalAgendado}</strong></div>
