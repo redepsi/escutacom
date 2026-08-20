@@ -60,6 +60,8 @@ body{margin:0;font-family:Inter,Arial,sans-serif;background:#f5f7fb;color:#17203
 .slot-btn:hover{filter:brightness(.96)}
 .slot-open{background:#e9f7ef;color:#176b36;border-color:#bce3cc}
 .slot-closed{background:#f3f4f6;color:#98a2b3;border-color:#e5e7eb}
+.slot-future{background:#eef0fd;color:#4c4ee0;border-color:#c7caf5}
+.slot-shut{background:#fafafa;color:#c3c9d3;border-color:#eeeeee}
 
 .placeholder{padding:40px 20px;text-align:center;color:#98a2b3}
 .modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:1000;padding:20px}
@@ -226,6 +228,12 @@ let currentPage = 'inicio';
 
 const WEEKDAYS = [
   { n: 1, l: 'Segunda' }, { n: 2, l: 'Terça' }, { n: 3, l: 'Quarta' },
+  { n: 4, l: 'Quinta' }, { n: 5, l: 'Sexta' }, { n: 6, l: 'Sábado' }
+];
+
+// Usado só para salas, que agora também podem abrir aos domingos.
+const ROOM_WEEKDAYS = [
+  { n: 0, l: 'Domingo' }, { n: 1, l: 'Segunda' }, { n: 2, l: 'Terça' }, { n: 3, l: 'Quarta' },
   { n: 4, l: 'Quinta' }, { n: 5, l: 'Sexta' }, { n: 6, l: 'Sábado' }
 ];
 
@@ -459,7 +467,7 @@ const COORD_PAGES = [
   { id: 'inicio', label: 'Início' },
   { id: 'agenda', label: 'Agenda' },
   { id: 'grade_geral', label: 'Grade Geral' },
-  { id: 'mapa', label: 'Mapa' },
+  { id: 'mapa', label: 'Mapa de Salas' },
   { id: 'pacientes', label: 'Pacientes' },
   { id: 'estagiarios', label: 'Estagiários' },
   { id: 'relatorios', label: 'Relatórios' },
@@ -554,7 +562,7 @@ function timesOverlap(startA, endA, startB, endB) {
 
 function dateWithWeekday(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
-  const wd = WEEKDAYS.find(w => w.n === d.getDay());
+  const wd = ROOM_WEEKDAYS.find(w => w.n === d.getDay());
   return `${wd ? wd.l.slice(0, 3) : ''} ${fmtBr(dateStr)}`;
 }
 
@@ -969,7 +977,38 @@ async function renderMeuPerfil() {
         <div><div class="muted" style="font-size:12px">Abordagens</div><div style="font-weight:700">${escapeHtml(currentIntern.preferred_approaches || '—')}</div></div>
         <div><div class="muted" style="font-size:12px">Público</div><div style="font-weight:700">${escapeHtml(currentIntern.preferred_audience || '—')}</div></div>
       </div>
+    </section>
+
+    <section class="panel">
+      <h2 style="margin-top:0">Salas onde atendo</h2>
+      <div id="myRoomsWrap"><div class="placeholder">Carregando...</div></div>
     </section>`;
+
+  const { data: staffing } = await db.from('room_staffing').select('room_id, weekday, start_time, end_time, rooms(name, address)').eq('intern_id', currentIntern.id);
+  const myRoomsWrap = document.getElementById('myRoomsWrap');
+
+  if (!staffing || staffing.length === 0) {
+    myRoomsWrap.innerHTML = `<div class="placeholder">Você ainda não foi ensalado em nenhuma sala.</div>`;
+  } else {
+    const byRoom = {};
+    staffing.forEach(s => {
+      const key = s.room_id;
+      if (!byRoom[key]) byRoom[key] = { name: s.rooms?.name || '?', address: s.rooms?.address, slots: [] };
+      byRoom[key].slots.push({ weekday: s.weekday, start: s.start_time, end: s.end_time });
+    });
+
+    myRoomsWrap.innerHTML = Object.values(byRoom).map(r => {
+      const slotsText = r.slots
+        .sort((a, b) => a.weekday - b.weekday || a.start.localeCompare(b.start))
+        .map(s => `${ROOM_WEEKDAYS.find(d => d.n === s.weekday).l} ${formatHM(s.start)}–${formatHM(s.end)}`)
+        .join(' · ');
+      return `<div class="panel" style="margin-bottom:10px;padding:14px">
+        <strong>${escapeHtml(r.name)}</strong>
+        <div class="muted" style="font-size:12px;margin-bottom:6px">${escapeHtml(r.address || 'Sem endereço cadastrado')}</div>
+        <div style="font-size:13px">${slotsText}</div>
+      </div>`;
+    }).join('');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1188,6 +1227,26 @@ function whatsappLink(whatsapp) {
   if (!digits) return null;
   if (!digits.startsWith('55')) digits = '55' + digits;
   return `https://wa.me/${digits}`;
+}
+
+function whatsappContactLink(whatsapp, patientName) {
+  const base = whatsappLink(whatsapp);
+  if (!base) return '#';
+  const firstTwoNames = (patientName || '').trim().split(/\s+/).slice(0, 2).join(' ') || 'tudo bem';
+  const message = `Oi, ${firstTwoNames}! Tudo bem? Me chamo Dawton, sou estagiário do Prof. Sérgio Duarte, e estou entrando em contato pelo *Projeto Escuta Comunitária*. Você se inscreveu para um projeto de atendimento psicológico da Uninassau e gostaria de saber se você tem disponibilidade para iniciar o processo terapêutico com um de nossos extensionistas.`;
+  return `${base}?text=${encodeURIComponent(message)}`;
+}
+
+function whatsappConfirmationLink(whatsapp, patientName, appt, roomInfo, internName) {
+  const base = whatsappLink(whatsapp);
+  if (!base) return '#';
+  const firstName = (patientName || '').trim().split(/\s+/)[0] || '';
+  const dateLabel = fmtBr(appt.appointment_date);
+  const timeLabel = formatHM(appt.start_time);
+  const roomName = roomInfo ? roomInfo.name : (appt.room || 'a definir');
+  const roomAddress = (roomInfo && roomInfo.address) ? roomInfo.address : 'endereço a confirmar';
+  const message = `Oi, ${firstName}! Seu atendimento será no dia ${dateLabel}, às ${timeLabel}, na sala ${roomName}, da ${roomAddress}, com ${internName || 'nosso estagiário'}.`;
+  return `${base}?text=${encodeURIComponent(message)}`;
 }
 
 // Cliente temporário, separado do cliente principal, usado apenas para criar
@@ -1585,29 +1644,33 @@ async function renderEstagiarios() {
 // ---------------------------------------------------------------------------
 // GRADE DE DISPONIBILIDADE (reutilizável: pacientes, estagiários)
 // ---------------------------------------------------------------------------
-function buildAvailabilityGrid(clinicSlots, selectedSlots) {
-  const enabledSlots = (clinicSlots || []).filter(s => s.enabled);
-  if (enabledSlots.length === 0) {
-    return `<div class="placeholder">Nenhum horário liberado pela clínica ainda. Configure em "Horários".</div>`;
+function buildAvailabilityGrid(allSlots, selectedSlots) {
+  if (!allSlots || allSlots.length === 0) {
+    return `<div class="placeholder">Nenhum horário cadastrado ainda. Configure em "Horários".</div>`;
   }
 
-  const times = [...new Set(enabledSlots.map(s => s.start_time.slice(0, 5)))].sort();
+  const times = [...new Set(allSlots.map(s => s.start_time.slice(0, 5)))].sort();
 
   let html = `<div class="schedule-grid"><div class="schedule-head">Horário</div>` +
     WEEKDAYS.map(d => `<div class="schedule-head">${d.l}</div>`).join('');
 
   times.forEach(time => {
-    const sampleSlot = enabledSlots.find(s => s.start_time.slice(0, 5) === time);
+    const sampleSlot = allSlots.find(s => s.start_time.slice(0, 5) === time);
     const timeLabel = sampleSlot ? `${formatHM(sampleSlot.start_time)} – ${formatHM(sampleSlot.end_time)}` : time;
     html += `<div><strong>${timeLabel}</strong></div>`;
     WEEKDAYS.forEach(d => {
-      const slot = enabledSlots.find(s => s.weekday === d.n && s.start_time.slice(0, 5) === time);
-      if (!slot) { html += `<div style="color:#d0d5dd;font-size:11px">Fechado</div>`; return; }
+      const slot = allSlots.find(s => s.weekday === d.n && s.start_time.slice(0, 5) === time);
+      if (!slot) { html += `<div style="color:#d0d5dd;font-size:11px">—</div>`; return; }
+
       const isSelected = (selectedSlots || []).some(s => s.weekday === d.n && s.start_time.slice(0, 5) === time);
-      const cls = isSelected ? 'slot-open' : 'slot-closed';
-      const label = isSelected ? '✓ Disponível' : 'Livre';
+      let cls, label;
+      if (slot.enabled && isSelected) { cls = 'slot-open'; label = '✓ Disponível'; }
+      else if (slot.enabled && !isSelected) { cls = 'slot-closed'; label = 'Livre'; }
+      else if (!slot.enabled && isSelected) { cls = 'slot-future'; label = '🔜 Fora do horário'; }
+      else { cls = 'slot-shut'; label = 'Fechado'; }
+
       html += `<div><button type="button" class="slot-btn avail-toggle ${cls}"
-        data-weekday="${d.n}" data-start="${slot.start_time}" data-end="${slot.end_time}">${label}</button></div>`;
+        data-weekday="${d.n}" data-start="${slot.start_time}" data-end="${slot.end_time}" data-enabled="${slot.enabled}">${label}</button></div>`;
     });
   });
 
@@ -1618,16 +1681,20 @@ function buildAvailabilityGrid(clinicSlots, selectedSlots) {
 function bindAvailabilityToggles(container) {
   container.querySelectorAll('.avail-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
-      const open = btn.classList.contains('slot-open');
-      btn.classList.toggle('slot-open', !open);
-      btn.classList.toggle('slot-closed', open);
-      btn.textContent = open ? 'Livre' : '✓ Disponível';
+      const enabled = btn.dataset.enabled === 'true';
+      const wasSelected = btn.classList.contains('slot-open') || btn.classList.contains('slot-future');
+      const nowSelected = !wasSelected;
+      btn.classList.remove('slot-open', 'slot-closed', 'slot-future', 'slot-shut');
+      if (enabled && nowSelected) { btn.classList.add('slot-open'); btn.textContent = '✓ Disponível'; }
+      else if (enabled && !nowSelected) { btn.classList.add('slot-closed'); btn.textContent = 'Livre'; }
+      else if (!enabled && nowSelected) { btn.classList.add('slot-future'); btn.textContent = '🔜 Fora do horário'; }
+      else { btn.classList.add('slot-shut'); btn.textContent = 'Fechado'; }
     });
   });
 }
 
 function readSelectedSlots(container) {
-  return Array.from(container.querySelectorAll('.avail-toggle.slot-open')).map(b => ({
+  return Array.from(container.querySelectorAll('.avail-toggle.slot-open, .avail-toggle.slot-future')).map(b => ({
     weekday: parseInt(b.dataset.weekday), start_time: b.dataset.start, end_time: b.dataset.end
   }));
 }
@@ -1680,6 +1747,10 @@ async function renderPacientes() {
         <button class="action secondary situation-filter" data-v="ativos">Ativos</button>
         <button class="action secondary situation-filter" data-v="agendado">Agendados</button>
         <button class="action secondary situation-filter" data-v="espera">Na espera</button>
+        <button class="action secondary situation-filter" data-v="contato">Em contato</button>
+        <button class="action secondary situation-filter" data-v="sem_encaixe">Sem encaixe</button>
+        <button class="action secondary situation-filter" data-v="pausados">Pausados</button>
+        <button class="action secondary situation-filter" data-v="alta">Alta</button>
         <button class="action secondary situation-filter" data-v="inativos">Inativos</button>
       </div>
       <div id="patientListWrap"><div class="placeholder">Carregando...</div></div>
@@ -1702,13 +1773,35 @@ async function renderPacientes() {
       <div class="field"><label>Origem (opcional)</label><input id="pOrigin" placeholder="Ex.: Encaminhado pela UBS X"></div>
       <div class="field"><label>Observações (opcional)</label><textarea id="pNotes" rows="3" placeholder="Ex.: Número incorreto, tentar novamente contato" style="width:100%;padding:12px;border:1px solid #d5dbe4;border-radius:9px;font-size:14px;font-family:inherit;resize:vertical"></textarea></div>
       <div class="field"><label>Status</label>
-        <select id="pStatus"><option value="ativo">Ativo</option><option value="inativo">Inativo</option></select>
+        <select id="pStatus">
+          <option value="ativo">Ativo</option>
+          <option value="em_contato">Em contato</option>
+          <option value="sem_encaixe">Sem encaixe</option>
+          <option value="pausado">Pausado</option>
+          <option value="alta">Alta</option>
+          <option value="inativo">Inativo</option>
+        </select>
       </div>
 
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e5e9ef">
         <div style="font-weight:700;margin-bottom:4px">Disponibilidade semanal (opcional)</div>
         <div class="muted" style="margin-bottom:12px">Marque os horários em que o paciente pode comparecer. Se nenhum horário for marcado, o paciente é considerado disponível em qualquer horário liberado.</div>
         <div id="patientAvailGrid"><div class="placeholder">Carregando grade...</div></div>
+      </div>
+
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid #e5e9ef">
+        <div style="font-weight:700;margin-bottom:4px">Outro horário (fora da faixa padrão 8h–18h)</div>
+        <div class="muted" style="margin-bottom:12px">Use isso só se o horário nem aparecer como linha na grade acima (por exemplo, antes das 8h, depois das 18h, ou meia-hora quebrada num dia que ainda não tem isso). Passa a valer sozinho assim que esse horário for aberto em "Horários".</div>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+          <div class="field" style="margin-bottom:0"><label>Dia</label>
+            <select id="pFutureAvailWeekday">${WEEKDAYS.map(d => `<option value="${d.n}">${d.l}</option>`).join('')}</select>
+          </div>
+          <div class="field" style="margin-bottom:0"><label>Início</label><input type="time" id="pFutureAvailStart" value="08:00"></div>
+          <div class="field" style="margin-bottom:0"><label>Término</label><input type="time" id="pFutureAvailEnd" value="09:00"></div>
+          <button id="addFutureAvailBtn" class="action secondary" style="padding:10px 14px">+ Adicionar</button>
+        </div>
+        <div class="message" id="futureAvailMsg"></div>
+        <div id="futureAvailListWrap"><div class="placeholder">Nenhum horário extra cadastrado.</div></div>
       </div>
 
       <div style="display:flex;gap:10px;margin-top:20px">
@@ -1726,14 +1819,15 @@ async function renderPacientes() {
   let originalStatus = null;
   let patientsCache = [];
   let clinicSlotsCache = [];
+  let futureAvailEntries = [];
 
-  const { data: clinicSlots } = await db.from('clinic_schedule_slots').select('*').eq('enabled', true);
+  const { data: clinicSlots } = await db.from('clinic_schedule_slots').select('*');
   clinicSlotsCache = clinicSlots || [];
 
   let situationFilter = 'ativos';
 
   async function loadList() {
-    const { data, error } = await db.from('patients').select('*').order('created_at', { ascending: false });
+    const { data, error } = await db.from('patients').select('*').order('registration_number', { ascending: true });
     if (error) {
       wrap.innerHTML = `<div class="message error" style="display:block">Erro: ${escapeHtml(error.message)}</div>`;
       return;
@@ -1761,7 +1855,11 @@ async function renderPacientes() {
 
     const filtered = patientsCache.filter(p => {
       if (situationFilter === 'inativos') return p.status === 'inativo';
-      if (p.status === 'inativo') return false; // inativos nunca entram nas outras abas
+      if (situationFilter === 'pausados') return p.status === 'pausado';
+      if (situationFilter === 'alta') return p.status === 'alta';
+      if (situationFilter === 'contato') return p.status === 'em_contato';
+      if (situationFilter === 'sem_encaixe') return p.status === 'sem_encaixe';
+      if (p.status !== 'ativo') return false; // só "ativo" entra nas abas Ativos/Agendados/Na espera
       if (situationFilter === 'agendado') return scheduledSet.has(p.id);
       if (situationFilter === 'espera') return !scheduledSet.has(p.id);
       return true; // ativos
@@ -1772,15 +1870,30 @@ async function renderPacientes() {
       return;
     }
 
+    const STATUS_BADGES = {
+      ativo: '<span style="color:#2f855a;font-weight:700">Ativo</span>',
+      inativo: '<span style="color:#b42318;font-weight:700">Inativo</span>',
+      pausado: '<span style="color:#9a6700;font-weight:700">Pausado</span>',
+      alta: '<span style="color:#315c8c;font-weight:700">Alta</span>',
+      em_contato: '<span style="color:#8a5b00;font-weight:700">Em contato</span>',
+      sem_encaixe: '<span style="color:#667085;font-weight:700">Sem encaixe</span>'
+    };
+
     const rows = filtered.map(p => {
-      const statusBadge = p.status === 'ativo'
-        ? `<span style="color:#2f855a;font-weight:700">Ativo</span>`
-        : `<span style="color:#b42318;font-weight:700">Inativo</span>`;
+      const statusBadge = STATUS_BADGES[p.status] || p.status;
       const situacao = p.status === 'inativo'
         ? `<span class="muted">Fora da clínica</span>`
-        : scheduledSet.has(p.id)
-          ? `<span style="color:#2f855a;font-weight:700">Agendado</span>`
-          : `<span style="color:#9a6700;font-weight:700">Na espera há ${daysSince(p.created_at)} dia(s)</span>`;
+        : p.status === 'pausado'
+          ? `<span style="color:#9a6700;font-weight:700">Pausado</span>`
+          : p.status === 'alta'
+            ? `<span style="color:#315c8c;font-weight:700">Alta</span>`
+            : p.status === 'em_contato'
+              ? `<span style="color:#8a5b00;font-weight:700">Em contato</span>`
+              : p.status === 'sem_encaixe'
+                ? `<span style="color:#667085;font-weight:700">Sem encaixe</span>`
+                : scheduledSet.has(p.id)
+                  ? `<span style="color:#2f855a;font-weight:700">Agendado</span>`
+                  : `<span style="color:#9a6700;font-weight:700">Na espera há ${daysSince(p.created_at)} dia(s)</span>`;
       const wa = whatsappLink(p.whatsapp);
       const waHtml = wa ? `<a href="${wa}" target="_blank" rel="noopener">${escapeHtml(p.whatsapp)}</a>` : (escapeHtml(p.whatsapp) || '—');
       const notesIcon = p.notes ? `<span title="${escapeHtml(p.notes)}" style="cursor:help">📝</span>` : '';
@@ -1848,6 +1961,7 @@ async function renderPacientes() {
   function resetForm() {
     editingId = null;
     originalStatus = null;
+    futureAvailEntries = [];
     formTitle.textContent = 'Novo paciente';
     msg.style.display = 'none';
     document.getElementById('pReg').value = 'Gerado automaticamente ao salvar';
@@ -1858,7 +1972,57 @@ async function renderPacientes() {
     document.getElementById('pStatus').value = 'ativo';
     availGridEl.innerHTML = buildAvailabilityGrid(clinicSlotsCache, []);
     bindAvailabilityToggles(availGridEl);
+    renderFutureAvailList();
   }
+
+  function renderFutureAvailList() {
+    const wrap = document.getElementById('futureAvailListWrap');
+    if (futureAvailEntries.length === 0) {
+      wrap.innerHTML = `<div class="placeholder">Nenhum horário fora do quadro atual cadastrado.</div>`;
+      return;
+    }
+    wrap.innerHTML = futureAvailEntries.map((e, idx) => {
+      const dayLabel = WEEKDAYS.find(d => d.n === e.weekday).l;
+      return `<div style="display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid #e5e9ef;padding:8px 12px;border-radius:8px;margin-bottom:6px">
+        <span style="font-size:13px">${dayLabel} ${formatHM(e.start_time)}–${formatHM(e.end_time)}</span>
+        <button class="remove-future-avail" data-idx="${idx}" style="border:0;background:none;color:#b42318;cursor:pointer;font-size:13px">Remover</button>
+      </div>`;
+    }).join('');
+    wrap.querySelectorAll('.remove-future-avail').forEach(btn => {
+      btn.addEventListener('click', () => {
+        futureAvailEntries.splice(parseInt(btn.dataset.idx), 1);
+        renderFutureAvailList();
+      });
+    });
+  }
+
+  document.getElementById('addFutureAvailBtn').addEventListener('click', () => {
+    const weekday = parseInt(document.getElementById('pFutureAvailWeekday').value);
+    const start = document.getElementById('pFutureAvailStart').value;
+    const end = document.getElementById('pFutureAvailEnd').value;
+    const msgEl = document.getElementById('futureAvailMsg');
+    msgEl.style.display = 'none';
+
+    if (!start || !end || start >= end) {
+      msgEl.textContent = 'Verifique os horários (início antes do término).';
+      msgEl.className = 'message error'; msgEl.style.display = 'block';
+      return;
+    }
+    const dup = futureAvailEntries.some(e => e.weekday === weekday && e.start_time === start);
+    if (dup) {
+      msgEl.textContent = 'Esse dia/horário já foi adicionado.';
+      msgEl.className = 'message error'; msgEl.style.display = 'block';
+      return;
+    }
+    const existsInGrid = (clinicSlotsCache || []).some(s => s.weekday === weekday && s.start_time.slice(0, 5) === start);
+    if (existsInGrid) {
+      msgEl.textContent = 'Esse horário já existe na grade acima — use os botões dela em vez desta lista.';
+      msgEl.className = 'message error'; msgEl.style.display = 'block';
+      return;
+    }
+    futureAvailEntries.push({ weekday, start_time: start, end_time: end });
+    renderFutureAvailList();
+  });
 
   async function openForm(patient) {
     resetForm();
@@ -1874,8 +2038,15 @@ async function renderPacientes() {
       document.getElementById('pStatus').value = patient.status || 'ativo';
 
       const { data: pAvail } = await db.from('patient_availability').select('*').eq('patient_id', patient.id);
-      availGridEl.innerHTML = buildAvailabilityGrid(clinicSlotsCache, pAvail || []);
+      const enabledSet = new Set((clinicSlotsCache || []).filter(c => c.enabled).map(c => `${c.weekday}_${c.start_time.slice(0, 5)}`));
+      const gridSlots = (pAvail || []).filter(a => enabledSet.has(`${a.weekday}_${a.start_time.slice(0, 5)}`));
+      futureAvailEntries = (pAvail || [])
+        .filter(a => !enabledSet.has(`${a.weekday}_${a.start_time.slice(0, 5)}`))
+        .map(a => ({ weekday: a.weekday, start_time: a.start_time, end_time: a.end_time }));
+
+      availGridEl.innerHTML = buildAvailabilityGrid(clinicSlotsCache, gridSlots);
       bindAvailabilityToggles(availGridEl);
+      renderFutureAvailList();
     }
     panel.style.display = 'block';
     panel.scrollIntoView({ behavior: 'smooth' });
@@ -2027,13 +2198,21 @@ async function renderPacientes() {
 
     const savedId = result.data.id;
     const selectedSlots = readSelectedSlots(availGridEl).map(s => ({ ...s, patient_id: savedId }));
+    const gridKeys = new Set(selectedSlots.map(s => `${s.weekday}_${s.start_time.slice(0, 5)}`));
+    const futureSlots = futureAvailEntries
+      .filter(s => !gridKeys.has(`${s.weekday}_${s.start_time.slice(0, 5)}`))
+      .map(s => ({ ...s, patient_id: savedId }));
+    const allSlots = [...selectedSlots, ...futureSlots];
 
     await db.from('patient_availability').delete().eq('patient_id', savedId);
-    if (selectedSlots.length > 0) await db.from('patient_availability').insert(selectedSlots);
+    if (allSlots.length > 0) await db.from('patient_availability').insert(allSlots);
 
-    // Se o paciente acabou de ser inativado, oferece cancelar os atendimentos futuros
-    if (editingId && originalStatus === 'ativo' && status === 'inativo') {
-      const confirmCancel = confirm('Este paciente foi marcado como inativo. Deseja cancelar todos os atendimentos futuros dele agora?');
+    // Se o paciente saiu de "ativo" (inativado, pausado ou recebeu alta), oferece cancelar os atendimentos futuros
+    // "Em contato" não entra aqui, pois não representa parar o tratamento.
+    // "Em contato" e "Sem encaixe" não entram aqui, pois não representam parar um tratamento em curso.
+    if (editingId && originalStatus === 'ativo' && status !== 'ativo' && status !== 'em_contato' && status !== 'sem_encaixe') {
+      const statusLabel = { inativo: 'inativo', pausado: 'pausado', alta: 'com alta' }[status] || status;
+      const confirmCancel = confirm(`Este paciente foi marcado como ${statusLabel}. Deseja cancelar todos os atendimentos futuros dele agora?`);
       if (confirmCancel) {
         const { error: rpcError } = await db.rpc('cancelar_atendimentos_futuros_paciente', { p_patient_id: savedId });
         if (rpcError) alert('Erro ao cancelar atendimentos futuros: ' + rpcError.message);
@@ -2047,6 +2226,12 @@ async function renderPacientes() {
 
   resetForm();
   await loadList();
+
+  if (pendingEditPatientId) {
+    const p = patientsCache.find(x => x.id === pendingEditPatientId);
+    pendingEditPatientId = null;
+    if (p) openForm(p);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2074,6 +2259,17 @@ async function renderPatientFicha(patientId, returnPage = 'pacientes') {
   const ausentes = all.filter(a => a.attendance_status === 'ausente').length;
   const cancelados = all.filter(a => a.status === 'cancelado').length;
 
+  const todayStr = toDateStr(new Date());
+  const nextAppt = all
+    .filter(a => a.status === 'agendado' && a.appointment_date >= todayStr)
+    .sort((a, b) => a.appointment_date.localeCompare(b.appointment_date) || a.start_time.localeCompare(b.start_time))[0] || null;
+
+  let roomInfo = null;
+  if (nextAppt && nextAppt.room) {
+    const { data: r } = await db.from('rooms').select('name, address').eq('name', nextAppt.room).maybeSingle();
+    roomInfo = r || null;
+  }
+
   const rows = all.map(a => {
     const isCancelled = a.status === 'cancelado';
     const attLabel = { pendente: 'Pendente', presente: 'Presente', ausente: 'Ausente', cancelado: 'Cancelado' }[a.attendance_status];
@@ -2087,12 +2283,26 @@ async function renderPatientFicha(patientId, returnPage = 'pacientes') {
     </tr>`;
   }).join('');
 
+  const isCoord = currentContext === 'coordenacao';
+  const contactedStyle = patient.last_contacted_at ? 'background:#2f855a' : '';
+  const contactedLabel = patient.last_contacted_at ? '✓ Contatado' : '💬 Contato';
+  const contactedTitle = patient.last_contacted_at ? `Contatado em ${new Date(patient.last_contacted_at).toLocaleString('pt-BR')}` : '';
+
   content.innerHTML = `
     <section class="panel">
-      <button id="backFromFicha" class="action secondary" style="margin-bottom:14px">← Voltar</button>
+      <div style="display:flex;gap:10px;margin-bottom:14px">
+        <button id="backFromFicha" class="action secondary">← Voltar</button>
+        ${isCoord ? `<button id="editFromFicha" class="action secondary" data-id="${patient.id}">Editar paciente</button>` : ''}
+      </div>
       <h2 style="margin-top:0">Ficha do paciente #${escapeHtml(patient.registration_number)}</h2>
       <div class="muted" style="margin-bottom:16px">${escapeHtml(patient.full_name || 'Nome não informado')} ${patient.origin ? '· ' + escapeHtml(patient.origin) : ''}</div>
-      ${patient.whatsapp ? `<div style="margin-bottom:16px">${(() => { const wa = whatsappLink(patient.whatsapp); return wa ? `<a href="${wa}" target="_blank" rel="noopener">${escapeHtml(patient.whatsapp)}</a>` : escapeHtml(patient.whatsapp); })()}</div>` : ''}
+      ${patient.whatsapp ? `<div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        ${(() => { const wa = whatsappLink(patient.whatsapp); return wa ? `<a href="${wa}" target="_blank" rel="noopener">${escapeHtml(patient.whatsapp)}</a>` : escapeHtml(patient.whatsapp); })()}
+        ${isCoord ? `<a id="contatoBtn" href="${whatsappContactLink(patient.whatsapp, patient.full_name)}" target="_blank" rel="noopener" class="action"
+          style="padding:6px 12px;font-size:12px;text-decoration:none;${contactedStyle}" title="${contactedTitle}">${contactedLabel}</a>` : ''}
+        ${isCoord && nextAppt ? `<a href="${whatsappConfirmationLink(patient.whatsapp, patient.full_name, nextAppt, roomInfo, nameById[nextAppt.intern_id])}" target="_blank" rel="noopener" class="action secondary"
+          style="padding:6px 12px;font-size:12px;text-decoration:none">📅 Confirmação</a>` : ''}
+      </div>` : ''}
       ${patient.notes ? `<div style="margin-bottom:16px;padding:12px;background:#fff5d8;border-radius:8px;font-size:13px"><strong>Observações:</strong> ${escapeHtml(patient.notes)}</div>` : ''}
 
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
@@ -2113,6 +2323,24 @@ async function renderPatientFicha(patientId, returnPage = 'pacientes') {
     </section>`;
 
   document.getElementById('backFromFicha').addEventListener('click', () => { currentPage = returnPage; render(); });
+
+  const editBtn = document.getElementById('editFromFicha');
+  if (editBtn) {
+    editBtn.addEventListener('click', () => {
+      pendingEditPatientId = patient.id;
+      currentPage = 'pacientes';
+      render();
+    });
+  }
+
+  const contatoBtn = document.getElementById('contatoBtn');
+  if (contatoBtn) {
+    contatoBtn.addEventListener('click', async () => {
+      await db.from('patients').update({ last_contacted_at: new Date().toISOString() }).eq('id', patientId);
+      contatoBtn.style.background = '#2f855a';
+      contatoBtn.textContent = '✓ Contatado';
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2368,6 +2596,7 @@ async function renderMinhaDisponibilidade() {
 // PÁGINA: GRADE GERAL DE DISPONIBILIDADE (calendário semanal cruzado)
 // ---------------------------------------------------------------------------
 let pendingQuickSchedule = null; // usado quando clicar num estagiário aqui e for para a Agenda
+let pendingEditPatientId = null; // usado quando clicar em "Editar paciente" na Ficha
 
 async function renderGradeGeral() {
   content.innerHTML = `
@@ -2405,6 +2634,7 @@ async function renderGradeGeral() {
 
   const occupiedKey = (internId, weekday, startTime) => `${internId}_${weekday}_${startTime}`;
   const occupiedSet = new Set((activeSeries || []).map(s => occupiedKey(s.intern_id, s.weekday, s.start_time)));
+  const internIdsWithPatient = new Set((activeSeries || []).map(s => s.intern_id));
 
   const nameById = {};
   (profiles || []).forEach(p => { nameById[p.id] = p.full_name; });
@@ -2412,30 +2642,41 @@ async function renderGradeGeral() {
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
 
   let selectedInternIds = new Set(internsList.map(i => i.id)); // começa com todos marcados
+  let onlyWithoutPatients = false;
 
   function renderFilter() {
     const allSelected = selectedInternIds.size === internsList.length;
     const label = allSelected ? 'Todos os estagiários' : `${selectedInternIds.size} de ${internsList.length} selecionados`;
 
     filterWrap.innerHTML = `
-      <div style="position:relative;display:inline-block">
-        <button type="button" id="internFilterToggle" class="action secondary">${label} ▾</button>
-        <div id="internFilterPanel" style="display:none;position:absolute;top:110%;left:0;background:#fff;
-          border:1px solid #e5e9ef;border-radius:10px;padding:10px;box-shadow:0 8px 24px rgba(23,32,51,.12);
-          z-index:20;min-width:240px;max-height:280px;overflow:auto">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;padding:6px 4px;border-bottom:1px solid #eef0f3;margin-bottom:4px;cursor:pointer">
-            <input type="checkbox" id="filterAll" ${allSelected ? 'checked' : ''}> Todos
-          </label>
-          ${internsList.map(i => `
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 4px;cursor:pointer">
-              <input type="checkbox" class="filterIntern" data-id="${i.id}" ${selectedInternIds.has(i.id) ? 'checked' : ''}> ${escapeHtml(i.full_name)}
-            </label>`).join('')}
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div style="position:relative;display:inline-block">
+          <button type="button" id="internFilterToggle" class="action secondary">${label} ▾</button>
+          <div id="internFilterPanel" style="display:none;position:absolute;top:110%;left:0;background:#fff;
+            border:1px solid #e5e9ef;border-radius:10px;padding:10px;box-shadow:0 8px 24px rgba(23,32,51,.12);
+            z-index:20;min-width:240px;max-height:280px;overflow:auto">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;padding:6px 4px;border-bottom:1px solid #eef0f3;margin-bottom:4px;cursor:pointer">
+              <input type="checkbox" id="filterAll" ${allSelected ? 'checked' : ''}> Todos
+            </label>
+            ${internsList.map(i => `
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:6px 4px;cursor:pointer">
+                <input type="checkbox" class="filterIntern" data-id="${i.id}" ${selectedInternIds.has(i.id) ? 'checked' : ''}> ${escapeHtml(i.full_name)}
+              </label>`).join('')}
+          </div>
         </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;background:#f8fafc;border:1px solid #e5e9ef;padding:8px 12px;border-radius:8px;cursor:pointer">
+          <input type="checkbox" id="filterWithoutPatients" ${onlyWithoutPatients ? 'checked' : ''}> Só estagiários sem paciente
+        </label>
       </div>
       <div style="display:flex;gap:14px;margin-top:10px;font-size:12px" class="muted">
         <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#e9f7ef;border:1px solid #bce3cc;margin-right:5px"></span>Disponível</span>
         <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#fff4d6;border:1px solid #f0d38a;margin-right:5px"></span>Já tem atendimento fixo</span>
       </div>`;
+
+    document.getElementById('filterWithoutPatients').addEventListener('change', (e) => {
+      onlyWithoutPatients = e.target.checked;
+      renderGrid();
+    });
 
     const toggleBtn = document.getElementById('internFilterToggle');
     const panel = document.getElementById('internFilterPanel');
@@ -2483,7 +2724,8 @@ async function renderGradeGeral() {
         if (!clinicOpen) { html += `<td style="padding:8px;color:#d0d5dd;font-size:11px">Fechado</td>`; return; }
 
         const matches = (allAvail || []).filter(a =>
-          a.weekday === d.n && a.start_time.slice(0, 5) === time && selectedInternIds.has(a.intern_id)
+          a.weekday === d.n && a.start_time.slice(0, 5) === time && selectedInternIds.has(a.intern_id) &&
+          (!onlyWithoutPatients || !internIdsWithPatient.has(a.intern_id))
         );
 
         if (matches.length === 0) {
@@ -2603,10 +2845,11 @@ async function renderMapa() {
   content.innerHTML = `
     <section class="panel">
       <div class="toolbar">
-        <div><h2>Salas de atendimento</h2><div class="muted">Cadastre as salas disponíveis na clínica.</div></div>
+        <div><h2>Salas de atendimento</h2><div class="muted">Cada sala tem seu próprio horário e os estagiários ensalados nela.</div></div>
       </div>
       <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
-        <div class="field" style="margin-bottom:0"><label>Nova sala</label><input id="newRoomName" placeholder="Ex.: Sala 3"></div>
+        <div class="field" style="margin-bottom:0"><label>Nome da sala</label><input id="newRoomName" placeholder="Ex.: Sala 3"></div>
+        <div class="field" style="margin-bottom:0"><label>Endereço (opcional)</label><input id="newRoomAddress" placeholder="Ex.: Rua X, 123"></div>
         <button id="addRoomBtn" class="action">+ Adicionar sala</button>
       </div>
       <div id="roomsMsg" class="message"></div>
@@ -2615,7 +2858,7 @@ async function renderMapa() {
 
     <section class="panel">
       <div class="toolbar">
-        <div><h2>Quem está em cada sala</h2><div class="muted">Veja os atendimentos agendados por sala em um dia específico.</div></div>
+        <div><h2>Quem está em cada sala</h2><div class="muted">Ensalamento e atendimentos agendados, por sala.</div></div>
       </div>
       <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
         <div style="display:flex;gap:4px">
@@ -2632,6 +2875,21 @@ async function renderMapa() {
 
   const roomsMsg = document.getElementById('roomsMsg');
 
+  async function seedRoomSlots(roomId) {
+    const rows = [];
+    for (let weekday = 1; weekday <= 6; weekday++) {
+      for (let hour = 8; hour <= 17; hour++) {
+        rows.push({
+          room_id: roomId, weekday,
+          start_time: `${String(hour).padStart(2, '0')}:00`,
+          end_time: `${String(hour + 1).padStart(2, '0')}:00`,
+          enabled: false
+        });
+      }
+    }
+    await db.from('room_schedule_slots').insert(rows);
+  }
+
   async function loadRooms() {
     const { data: rooms, error } = await db.from('rooms').select('*').order('name');
     const wrap = document.getElementById('roomsListWrap');
@@ -2640,34 +2898,257 @@ async function renderMapa() {
       wrap.innerHTML = `<div class="placeholder">Nenhuma sala cadastrada ainda.</div>`;
       return [];
     }
-    wrap.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px">` + rooms.map(r => `
-      <div style="display:flex;align-items:center;gap:8px;background:#f8fafc;border:1px solid #e5e9ef;padding:8px 12px;border-radius:999px">
-        <strong style="font-size:13px">${escapeHtml(r.name)}</strong>
-        <button class="delete-room" data-id="${r.id}" style="border:0;background:none;color:#b42318;cursor:pointer;font-size:13px">✕</button>
-      </div>`).join('') + `</div>`;
+
+    wrap.innerHTML = rooms.map(r => `
+      <div class="panel" style="margin-bottom:10px;padding:14px">
+        <div id="roomView-${r.id}" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div>
+            <strong>${escapeHtml(r.name)}</strong>
+            <div class="muted" style="font-size:12px">${escapeHtml(r.address || 'Sem endereço cadastrado')}</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="action secondary edit-room-btn" data-id="${r.id}" style="padding:6px 10px;font-size:12px">Editar</button>
+            <button class="action secondary manage-room-btn" data-id="${r.id}" style="padding:6px 10px;font-size:12px">Gerenciar horário e ensalamento</button>
+            <button class="action secondary delete-room" data-id="${r.id}" style="padding:6px 10px;font-size:12px;color:#b42318">Excluir</button>
+          </div>
+        </div>
+        <div id="roomEditForm-${r.id}" style="display:none;gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div class="field" style="margin-bottom:0"><label>Nome</label><input id="roomEditName-${r.id}" value="${escapeHtml(r.name)}"></div>
+          <div class="field" style="margin-bottom:0"><label>Endereço</label><input id="roomEditAddress-${r.id}" value="${escapeHtml(r.address || '')}"></div>
+          <button class="action save-room-edit-btn" data-id="${r.id}" style="padding:9px 14px">Salvar</button>
+          <button class="action secondary cancel-room-edit-btn" data-id="${r.id}" style="padding:9px 14px">Cancelar</button>
+        </div>
+        <div class="message" id="roomEditMsg-${r.id}"></div>
+        <div id="roomDetail-${r.id}" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid #e5e9ef"></div>
+      </div>`).join('');
 
     wrap.querySelectorAll('.delete-room').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!confirm('Excluir esta sala? Atendimentos já vinculados a ela mantêm o nome salvo, mas ela sairá da lista de opções.')) return;
+        if (!confirm('Excluir esta sala? O horário e o ensalamento dela também serão removidos. Atendimentos já registrados mantêm o nome da sala salvo.')) return;
         const { error: delError } = await db.from('rooms').delete().eq('id', btn.dataset.id);
         if (delError) alert('Erro ao excluir: ' + delError.message); else { await loadRooms(); await loadMapaGrid(); }
       });
     });
+
+    wrap.querySelectorAll('.edit-room-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById(`roomView-${btn.dataset.id}`).style.display = 'none';
+        document.getElementById(`roomEditForm-${btn.dataset.id}`).style.display = 'flex';
+      });
+    });
+
+    wrap.querySelectorAll('.cancel-room-edit-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.getElementById(`roomEditForm-${btn.dataset.id}`).style.display = 'none';
+        document.getElementById(`roomView-${btn.dataset.id}`).style.display = 'flex';
+      });
+    });
+
+    wrap.querySelectorAll('.save-room-edit-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const name = document.getElementById(`roomEditName-${id}`).value.trim();
+        const address = document.getElementById(`roomEditAddress-${id}`).value.trim() || null;
+        const msgEl = document.getElementById(`roomEditMsg-${id}`);
+        msgEl.style.display = 'none';
+
+        if (!name) {
+          msgEl.textContent = 'O nome da sala não pode ficar vazio.';
+          msgEl.className = 'message error'; msgEl.style.display = 'block';
+          return;
+        }
+
+        const { error } = await db.from('rooms').update({ name, address }).eq('id', id);
+        if (error) {
+          msgEl.textContent = error.code === '23505' ? 'Já existe uma sala com esse nome.' : 'Erro ao salvar: ' + error.message;
+          msgEl.className = 'message error'; msgEl.style.display = 'block';
+          return;
+        }
+        await loadRooms();
+        await loadMapaGrid();
+      });
+    });
+
+    wrap.querySelectorAll('.manage-room-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const detailEl = document.getElementById(`roomDetail-${btn.dataset.id}`);
+        const isOpen = detailEl.style.display !== 'none';
+        if (isOpen) { detailEl.style.display = 'none'; return; }
+        detailEl.style.display = 'block';
+        detailEl.innerHTML = '<div class="placeholder">Carregando...</div>';
+        await loadRoomDetail(btn.dataset.id, detailEl);
+      });
+    });
+
     return rooms;
   }
 
+  async function loadRoomDetail(roomId, detailEl) {
+    const [{ data: slots }, { data: interns }, { data: staffing }] = await Promise.all([
+      db.from('room_schedule_slots').select('*').eq('room_id', roomId).order('weekday').order('start_time'),
+      db.from('interns').select('id').eq('status', 'ativo'),
+      db.from('room_staffing').select('*').eq('room_id', roomId)
+    ]);
+
+    const internIds = (interns || []).map(i => i.id);
+    const [{ data: profiles }, { data: allAvail }] = await Promise.all([
+      internIds.length ? db.from('profiles').select('id, full_name').in('id', internIds) : { data: [] },
+      internIds.length ? db.from('intern_availability').select('*').in('intern_id', internIds) : { data: [] }
+    ]);
+    const nameById = {};
+    (profiles || []).forEach(p => { nameById[p.id] = p.full_name; });
+
+    detailEl.innerHTML = `
+      <div style="font-weight:700;margin-bottom:8px">Adicionar horário nesta sala</div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+        <div class="field" style="margin-bottom:0"><label>Dia</label>
+          <select id="newSlotWeekday-${roomId}">${ROOM_WEEKDAYS.map(d => `<option value="${d.n}">${d.l}</option>`).join('')}</select>
+        </div>
+        <div class="field" style="margin-bottom:0"><label>Início</label><input type="time" id="newSlotStart-${roomId}" value="08:00"></div>
+        <div class="field" style="margin-bottom:0"><label>Término</label><input type="time" id="newSlotEnd-${roomId}" value="09:00"></div>
+        <button class="action add-room-slot-btn" data-room="${roomId}" style="padding:10px 14px">+ Adicionar horário</button>
+      </div>
+      <div class="message" id="roomSlotMsg-${roomId}"></div>
+      <div style="font-weight:700;margin-bottom:8px">Horários e ensalamento</div>
+      <div id="roomDayTabs-${roomId}" style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:12px"></div>
+      <div id="roomSlotsWrap-${roomId}"></div>`;
+
+    let selectedDay = new Date().getDay();
+
+    function renderDayTabs() {
+      const tabsWrap = document.getElementById(`roomDayTabs-${roomId}`);
+      tabsWrap.innerHTML = ROOM_WEEKDAYS.map(d => {
+        const freeCount = slots.filter(s => s.weekday === d.n && s.enabled &&
+          !(staffing || []).some(st => st.weekday === d.n && st.start_time.slice(0, 5) === s.start_time.slice(0, 5))
+        ).length;
+        return `<button class="action secondary room-day-tab" data-day="${d.n}"
+          style="padding:6px 12px;font-size:12px;${d.n === selectedDay ? 'background:#315c8c;color:#fff;border-color:#315c8c' : ''}">
+          ${d.l.slice(0, 3)}${freeCount > 0 ? ` (${freeCount} livre${freeCount > 1 ? 's' : ''})` : ''}</button>`;
+      }).join('');
+
+      tabsWrap.querySelectorAll('.room-day-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          selectedDay = parseInt(btn.dataset.day);
+          renderDayTabs();
+          renderSlotsList();
+        });
+      });
+    }
+
+    function renderSlotsList() {
+      const slotsWrap = document.getElementById(`roomSlotsWrap-${roomId}`);
+      const daySlots = slots.filter(s => s.weekday === selectedDay);
+
+      if (daySlots.length === 0) {
+        slotsWrap.innerHTML = `<div class="placeholder">Nenhum horário cadastrado neste dia ainda.</div>`;
+        return;
+      }
+      const rows = daySlots.slice().sort((a, b) => a.start_time.localeCompare(b.start_time)).map(s => {
+        const current = (staffing || []).find(st => st.weekday === s.weekday && st.start_time.slice(0, 5) === s.start_time.slice(0, 5));
+        // Domingo não tem disponibilidade pessoal cadastrável pelo estagiário ainda,
+        // então nesse caso mostramos todos os ativos, sem filtrar.
+        const eligibleInterns = s.weekday === 0
+          ? (interns || []).map(i => i.id)
+          : (allAvail || [])
+              .filter(a => a.weekday === s.weekday && a.start_time.slice(0, 5) === s.start_time.slice(0, 5))
+              .map(a => a.intern_id);
+
+        const staffingCell = !s.enabled ? '<span class="muted">Sala fechada neste horário</span>' : `
+          <select class="staffing-select" data-room="${roomId}" data-weekday="${s.weekday}" data-start="${s.start_time}" data-end="${s.end_time}" data-current="${current ? current.intern_id : ''}">
+            <option value="">Ninguém ensalado</option>
+            ${eligibleInterns.map(iid => `<option value="${iid}" ${current && current.intern_id === iid ? 'selected' : ''}>${escapeHtml(nameById[iid] || '?')}</option>`).join('')}
+          </select>
+          ${s.weekday === 0 ? '<div class="muted" style="font-size:11px;margin-top:2px">Domingo: lista com todos os estagiários ativos (sem filtro de disponibilidade)</div>' : ''}
+          ${s.weekday !== 0 && eligibleInterns.length === 0 ? '<div class="muted" style="font-size:11px;margin-top:2px">Nenhum estagiário com disponibilidade pessoal aqui</div>' : ''}`;
+
+        return `<tr>
+          <td>${formatHM(s.start_time)}–${formatHM(s.end_time)}</td>
+          <td><button class="toggle-room-slot" data-id="${s.id}" data-current="${s.enabled}"
+            style="padding:5px 10px;font-size:12px;border-radius:8px;cursor:pointer;font-weight:700;
+            background:${s.enabled ? '#e9f7ef' : '#f3f4f6'};color:${s.enabled ? '#176b36' : '#475467'};border:1px solid ${s.enabled ? '#bce3cc' : '#e5e7eb'}">
+            ${s.enabled ? '🟢 Liberado' : '⚪ Fechado'}</button></td>
+          <td>${staffingCell}</td>
+        </tr>`;
+      }).join('');
+
+      slotsWrap.innerHTML = `<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="text-align:left;font-size:12px;color:#667085"><th style="padding:6px 8px">Horário</th><th>Status</th><th>Ensalamento</th></tr>
+        ${rows}</table></div>`;
+
+      slotsWrap.querySelectorAll('.toggle-room-slot').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const next = btn.dataset.current !== 'true';
+          await db.from('room_schedule_slots').update({ enabled: next }).eq('id', btn.dataset.id);
+          const s = slots.find(x => x.id === btn.dataset.id);
+          if (s) s.enabled = next;
+          renderDayTabs();
+          renderSlotsList();
+        });
+      });
+
+      slotsWrap.querySelectorAll('.staffing-select').forEach(sel => {
+        sel.addEventListener('change', async () => {
+          const { room, weekday, start, end } = sel.dataset;
+          await db.from('room_staffing').delete().eq('room_id', room).eq('weekday', weekday).eq('start_time', start);
+          if (sel.value) {
+            await db.from('room_staffing').insert([{ room_id: room, intern_id: sel.value, weekday: parseInt(weekday), start_time: start, end_time: end }]);
+          }
+          const idx = (staffing || []).findIndex(st => st.weekday === parseInt(weekday) && st.start_time.slice(0, 5) === start.slice(0, 5));
+          if (idx >= 0) staffing.splice(idx, 1);
+          if (sel.value) staffing.push({ room_id: room, intern_id: sel.value, weekday: parseInt(weekday), start_time: start, end_time: end });
+          renderDayTabs();
+        });
+      });
+    }
+
+    renderDayTabs();
+    renderSlotsList();
+
+    detailEl.querySelector('.add-room-slot-btn').addEventListener('click', async () => {
+      const weekday = parseInt(document.getElementById(`newSlotWeekday-${roomId}`).value);
+      const start = document.getElementById(`newSlotStart-${roomId}`).value;
+      const end = document.getElementById(`newSlotEnd-${roomId}`).value;
+      const msgEl = document.getElementById(`roomSlotMsg-${roomId}`);
+      msgEl.style.display = 'none';
+
+      if (!start || !end || start >= end) {
+        msgEl.textContent = 'Verifique os horários (início antes do término).';
+        msgEl.className = 'message error'; msgEl.style.display = 'block';
+        return;
+      }
+
+      const { data: inserted, error } = await db.from('room_schedule_slots')
+        .insert([{ room_id: roomId, weekday, start_time: start, end_time: end, enabled: true }])
+        .select().single();
+
+      if (error) {
+        msgEl.textContent = error.code === '23505' ? 'Já existe um horário começando nesse dia/hora nesta sala.' : 'Erro: ' + error.message;
+        msgEl.className = 'message error'; msgEl.style.display = 'block';
+        return;
+      }
+
+      slots.push(inserted);
+      selectedDay = inserted.weekday;
+      renderDayTabs();
+      renderSlotsList();
+    });
+  }
+
   document.getElementById('addRoomBtn').addEventListener('click', async () => {
-    const input = document.getElementById('newRoomName');
-    const name = input.value.trim();
+    const nameInput = document.getElementById('newRoomName');
+    const addressInput = document.getElementById('newRoomAddress');
+    const name = nameInput.value.trim();
+    const address = addressInput.value.trim() || null;
     roomsMsg.style.display = 'none';
     if (!name) return;
-    const { error } = await db.from('rooms').insert([{ name }]);
+    const { data: newRoom, error } = await db.from('rooms').insert([{ name, address }]).select().single();
     if (error) {
       roomsMsg.textContent = 'Erro ao adicionar: ' + error.message;
       roomsMsg.className = 'message error'; roomsMsg.style.display = 'block';
       return;
     }
-    input.value = '';
+    await seedRoomSlots(newRoom.id);
+    nameInput.value = ''; addressInput.value = '';
     await loadRooms();
     await loadMapaGrid();
   });
@@ -2696,7 +3177,7 @@ async function renderMapa() {
 
     let rangeStart, rangeEnd;
     if (mapaView === 'semana') {
-      const range = getDateRange('semana', mapaAnchorDate);
+      const range = getMapaWeekRange(mapaAnchorDate);
       rangeStart = range.start; rangeEnd = range.end;
       document.getElementById('mapaDayLabel').textContent = `${fmtBr(toDateStr(range.start))} a ${fmtBr(toDateStr(range.end))}`;
     } else {
@@ -2705,9 +3186,10 @@ async function renderMapa() {
     }
     const startStr = toDateStr(rangeStart), endStr = toDateStr(rangeEnd);
 
-    const [{ data: rooms }, { data: clinicSlots }, { data: appts }] = await Promise.all([
+    const [{ data: rooms }, { data: allSlots }, { data: allStaffing }, { data: appts }] = await Promise.all([
       db.from('rooms').select('*').order('name'),
-      db.from('clinic_schedule_slots').select('*').eq('enabled', true),
+      db.from('room_schedule_slots').select('*').eq('enabled', true),
+      db.from('room_staffing').select('*'),
       db.from('appointments').select('appointment_date, start_time, end_time, room, patient_id, intern_id, status, patients(registration_number, full_name)')
         .gte('appointment_date', startStr).lte('appointment_date', endStr).eq('status', 'agendado')
     ]);
@@ -2717,59 +3199,59 @@ async function renderMapa() {
       return;
     }
 
-    const internIds = [...new Set((appts || []).map(a => a.intern_id))];
+    const internIds = [...new Set([...(allStaffing || []).map(s => s.intern_id), ...(appts || []).map(a => a.intern_id)])];
     const { data: profiles } = internIds.length ? await db.from('profiles').select('id, full_name').in('id', internIds) : { data: [] };
     const nameById = {};
     (profiles || []).forEach(p => { nameById[p.id] = p.full_name; });
 
-    function buildDayTable(dateStr) {
+    function buildRoomDaySection(room, dateStr) {
       const weekday = new Date(dateStr + 'T00:00:00').getDay();
-      const daySlots = (clinicSlots || []).filter(s => s.weekday === weekday);
-      const times = [...new Set(daySlots.map(s => s.start_time.slice(0, 5)))].sort();
-      if (times.length === 0) return `<div class="placeholder" style="text-align:left;padding:12px 0">Nenhum horário liberado pela clínica neste dia da semana.</div>`;
+      const roomSlots = (allSlots || []).filter(s => s.room_id === room.id && s.weekday === weekday).sort((a, b) => a.start_time.localeCompare(b.start_time));
+      if (roomSlots.length === 0) return `<div class="placeholder" style="text-align:left;padding:8px 0">Sala fechada neste dia.</div>`;
 
-      const dayAppts = (appts || []).filter(a => a.appointment_date === dateStr);
-      const withRoom = dayAppts.filter(a => a.room);
-      const withoutRoom = dayAppts.filter(a => !a.room);
+      const rows = roomSlots.map(s => {
+        const staffed = (allStaffing || []).find(st => st.room_id === room.id && st.weekday === weekday && st.start_time.slice(0, 5) === s.start_time.slice(0, 5));
+        const internName = staffed ? (nameById[staffed.intern_id] || '?') : null;
+        const appt = (appts || []).find(a => a.room === room.name && a.appointment_date === dateStr && a.start_time.slice(0, 5) === s.start_time.slice(0, 5));
+        const patLabel = appt && appt.patients ? `#${appt.patients.registration_number} ${appt.patients.full_name || ''}` : null;
 
-      let html = `<div style="overflow:auto"><table style="min-width:${200 + rooms.length * 180}px;border-collapse:collapse;width:100%">
-        <tr style="text-align:left;font-size:12px;color:#667085">
-          <th style="padding:8px">Horário</th>${rooms.map(r => `<th>${escapeHtml(r.name)}</th>`).join('')}
+        return `<tr>
+          <td style="padding:6px 8px;white-space:nowrap">${formatHM(s.start_time)}–${formatHM(s.end_time)}</td>
+          <td>${internName ? escapeHtml(internName) : '<span class="muted">Sem ensalamento</span>'}</td>
+          <td>${patLabel ? escapeHtml(patLabel) : (internName ? '<span class="muted">Livre</span>' : '—')}</td>
         </tr>`;
+      }).join('');
 
-      times.forEach(time => {
-        html += `<tr style="border-top:1px solid #eef0f3"><td style="padding:8px;font-weight:700;white-space:nowrap">${formatHM(time)}</td>`;
-        rooms.forEach(room => {
-          const match = withRoom.find(a => a.room === room.name && a.start_time.slice(0, 5) === time);
-          if (!match) { html += `<td style="padding:8px;color:#c3c9d3;font-size:12px">—</td>`; return; }
-          const patLabel = match.patients ? `#${match.patients.registration_number} ${match.patients.full_name || ''}` : '—';
-          html += `<td style="padding:8px;background:#f4f7fb;font-size:12px">
-            <strong>${escapeHtml(patLabel)}</strong><br><span class="muted">${escapeHtml(nameById[match.intern_id] || '?')}</span>
-          </td>`;
-        });
-        html += `</tr>`;
-      });
-      html += `</table></div>`;
-
-      if (withoutRoom.length > 0) {
-        html += `<div style="margin-top:10px;padding:10px;background:#fff5d8;border-radius:8px;font-size:12px">
-          <strong>${withoutRoom.length} atendimento(s) sem sala definida.</strong> Edite o agendamento na Agenda para atribuir uma sala.
-        </div>`;
-      }
-      return html;
+      return `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="text-align:left;font-size:12px;color:#667085"><th style="padding:6px 8px">Horário</th><th>Estagiário</th><th>Paciente</th></tr>
+        ${rows}</table>`;
     }
 
-    let html;
+    let html = '';
     if (mapaView === 'dia') {
-      html = buildDayTable(startStr);
+      html = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">` +
+        rooms.map(room => `<div class="panel" style="margin-bottom:0;padding:16px">
+          <div style="font-weight:700;margin-bottom:8px">${escapeHtml(room.name)}</div>
+          ${buildRoomDaySection(room, startStr)}
+        </div>`).join('') + `</div>`;
     } else {
-      html = '';
-      let curr = new Date(rangeStart);
-      while (curr <= rangeEnd) {
-        const dStr = toDateStr(curr);
-        html += `<div style="margin:20px 0 8px;font-weight:700;text-transform:capitalize">${dateWithWeekday(dStr)}</div>` + buildDayTable(dStr);
-        curr.setDate(curr.getDate() + 1);
-      }
+      html = rooms.map(room => {
+        let dayBlocks = '';
+        let curr = new Date(rangeStart);
+        while (curr <= rangeEnd) {
+          const dStr = toDateStr(curr);
+          dayBlocks += `<div style="margin:10px 0 4px;font-weight:700;font-size:13px;text-transform:capitalize">${dateWithWeekday(dStr)}</div>${buildRoomDaySection(room, dStr)}`;
+          curr.setDate(curr.getDate() + 1);
+        }
+        return `<div class="panel"><h3 style="margin-top:0">${escapeHtml(room.name)}</h3>${dayBlocks}</div>`;
+      }).join('');
+    }
+
+    const unassigned = (appts || []).filter(a => !a.room);
+    if (unassigned.length > 0) {
+      html += `<div style="margin-top:16px;padding:12px;background:#fff5d8;border-radius:8px;font-size:13px">
+        <strong>${unassigned.length} atendimento(s) sem sala definida no período.</strong> Edite o agendamento na Agenda para atribuir uma sala.
+      </div>`;
     }
 
     gridWrap.innerHTML = html;
@@ -2800,6 +3282,16 @@ function getDateRange(view, anchor) {
   const first = new Date(a.getFullYear(), a.getMonth(), 1);
   const last = new Date(a.getFullYear(), a.getMonth() + 1, 0);
   return { start: first, end: last };
+}
+
+// Igual à de cima, mas incluindo domingo — só para o Mapa, já que salas podem abrir nesse dia.
+function getMapaWeekRange(anchor) {
+  const a = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+  const day = a.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(a); monday.setDate(a.getDate() + diffToMonday);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+  return { start: monday, end: sunday };
 }
 
 function toDateStr(d) {
@@ -2847,14 +3339,27 @@ async function renderAgenda() {
 
     <section id="apptFormPanel" class="panel" style="display:none">
       <div class="toolbar"><h2>Novo agendamento semanal</h2></div>
+      <div style="display:flex;gap:4px;margin-bottom:16px">
+        <button class="action secondary appt-mode-btn" data-mode="estagiario">Por estagiário</button>
+        <button class="action secondary appt-mode-btn" data-mode="sala">Por sala</button>
+      </div>
       <div id="apptFormMsg" class="message"></div>
 
-      <div class="field"><label>Paciente *</label><select id="fPatient"><option value="">Selecione...</option></select></div>
-      <div class="field"><label>Estagiário *</label><select id="fIntern" disabled><option value="">Escolha o paciente primeiro</option></select></div>
-      <div class="field"><label>Dia e horário *</label><select id="fSlot" disabled><option value="">Escolha o estagiário primeiro</option></select></div>
+      <div id="apptModeEstagiario">
+        <div class="field"><label>Paciente *</label><select id="fPatient"><option value="">Selecione...</option></select></div>
+        <div class="field"><label>Estagiário *</label><select id="fIntern" disabled><option value="">Escolha o paciente primeiro</option></select></div>
+        <div class="field"><label>Dia e horário *</label><select id="fSlot" disabled><option value="">Escolha o estagiário primeiro</option></select></div>
+        <div class="field"><label>Sala (opcional)</label><select id="fRoom"><option value="">Nenhuma</option></select></div>
+      </div>
+
+      <div id="apptModeSala" style="display:none">
+        <div class="field"><label>Sala *</label><select id="fSalaRoom"><option value="">Selecione...</option></select></div>
+        <div class="field"><label>Dia e horário *</label><select id="fSalaSlot" disabled><option value="">Escolha a sala primeiro</option></select></div>
+        <div class="field"><label>Paciente *</label><select id="fSalaPatient" disabled><option value="">Escolha o dia e horário primeiro</option></select></div>
+      </div>
+
       <div class="field"><label>Data de início *</label><input type="date" id="fStartDate"></div>
       <div class="field"><label>Data de término *</label><input type="date" id="fEndDate"></div>
-      <div class="field"><label>Sala (opcional)</label><select id="fRoom"><option value="">Nenhuma</option></select></div>
 
       <div id="apptPreviewBox" style="margin-top:14px;padding:14px;background:#f4f7fb;border-radius:10px">
         <strong>Prévia:</strong>
@@ -2927,9 +3432,15 @@ async function renderAgenda() {
   const { data: allInternAvail } = internIds.length
     ? await db.from('intern_availability').select('*').in('intern_id', internIds)
     : { data: [] };
+  const patientIds = (patients || []).map(p => p.id);
+  const { data: allPatientAvail } = patientIds.length
+    ? await db.from('patient_availability').select('patient_id, weekday, start_time').in('patient_id', patientIds)
+    : { data: [] };
   const { data: roomsList } = await db.from('rooms').select('*').order('name');
   document.getElementById('fRoom').innerHTML = '<option value="">Nenhuma</option>' +
     (roomsList || []).map(r => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
+  document.getElementById('fSalaRoom').innerHTML = '<option value="">Selecione...</option>' +
+    (roomsList || []).map(r => `<option value="${r.id}">${escapeHtml(r.name)}</option>`).join('');
 
   // ---- Filtros da listagem ----
   const filterIntern = document.getElementById('filterIntern');
@@ -3296,19 +3807,44 @@ async function renderAgenda() {
   const fPatient = document.getElementById('fPatient');
   const fIntern = document.getElementById('fIntern');
   const fSlot = document.getElementById('fSlot');
+  const fSalaRoom = document.getElementById('fSalaRoom');
+  const fSalaSlot = document.getElementById('fSalaSlot');
+  const fSalaPatient = document.getElementById('fSalaPatient');
   const fStartDate = document.getElementById('fStartDate');
   const fEndDate = document.getElementById('fEndDate');
   const previewText = document.getElementById('apptPreviewText');
   const confirmBtn = document.getElementById('confirmApptBtn');
+  let apptMode = 'estagiario';
 
   fPatient.innerHTML = '<option value="">Selecione...</option>' +
     patientsList.map(p => `<option value="${p.id}">#${escapeHtml(p.registration_number)} — ${escapeHtml(p.full_name || 'Sem nome')}</option>`).join('');
 
-  function resetApptForm() {
+  document.querySelectorAll('.appt-mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === apptMode);
+    btn.addEventListener('click', () => {
+      apptMode = btn.dataset.mode;
+      document.querySelectorAll('.appt-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === apptMode));
+      document.getElementById('apptModeEstagiario').style.display = apptMode === 'estagiario' ? 'block' : 'none';
+      document.getElementById('apptModeSala').style.display = apptMode === 'sala' ? 'block' : 'none';
+      resetApptForm(false);
+    });
+  });
+
+  function resetApptForm(resetMode = true) {
     msg.style.display = 'none';
+    if (resetMode) {
+      apptMode = 'estagiario';
+      document.querySelectorAll('.appt-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === apptMode));
+      document.getElementById('apptModeEstagiario').style.display = 'block';
+      document.getElementById('apptModeSala').style.display = 'none';
+    }
     fPatient.value = ''; fIntern.innerHTML = '<option value="">Escolha o paciente primeiro</option>'; fIntern.disabled = true;
     fSlot.innerHTML = '<option value="">Escolha o estagiário primeiro</option>'; fSlot.disabled = true;
-    fStartDate.value = ''; fEndDate.value = ''; document.getElementById('fRoom').value = '';
+    document.getElementById('fRoom').value = '';
+    fSalaRoom.value = '';
+    fSalaSlot.innerHTML = '<option value="">Escolha a sala primeiro</option>'; fSalaSlot.disabled = true;
+    fSalaPatient.innerHTML = '<option value="">Escolha o dia e horário primeiro</option>'; fSalaPatient.disabled = true;
+    fStartDate.value = ''; fEndDate.value = '';
     previewText.textContent = 'Preencha os campos acima.';
     confirmBtn.disabled = true;
   }
@@ -3389,23 +3925,101 @@ async function renderAgenda() {
     }
   }
 
+  // ---- Modo "Por sala" ----
+  async function updateSalaSlotOptions() {
+    const roomId = fSalaRoom.value;
+    fSalaSlot.innerHTML = '<option value="">Selecione...</option>';
+    fSalaPatient.innerHTML = '<option value="">Escolha o dia e horário primeiro</option>';
+    fSalaPatient.disabled = true;
+    confirmBtn.disabled = true;
+    previewText.textContent = 'Preencha os campos acima.';
+
+    if (!roomId) { fSalaSlot.disabled = true; fSalaSlot.innerHTML = '<option value="">Escolha a sala primeiro</option>'; return; }
+
+    const [{ data: roomSlots }, { data: roomStaffing }] = await Promise.all([
+      db.from('room_schedule_slots').select('*').eq('room_id', roomId).eq('enabled', true),
+      db.from('room_staffing').select('*').eq('room_id', roomId)
+    ]);
+
+    const staffed = (roomSlots || [])
+      .map(s => ({ ...s, staffing: (roomStaffing || []).find(st => st.weekday === s.weekday && st.start_time.slice(0, 5) === s.start_time.slice(0, 5)) }))
+      .filter(s => s.staffing)
+      .sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time));
+
+    if (staffed.length === 0) {
+      fSalaSlot.innerHTML = '<option value="">Nenhum horário ensalado nesta sala</option>';
+      fSalaSlot.disabled = true;
+      return;
+    }
+
+    fSalaSlot.innerHTML = '<option value="">Selecione...</option>' + staffed.map(s => {
+      const dayLabel = ROOM_WEEKDAYS.find(d => d.n === s.weekday).l;
+      const internName = nameById[s.staffing.intern_id] || '?';
+      return `<option value="${s.weekday}|${s.start_time}|${s.end_time}|${s.staffing.intern_id}">${dayLabel} ${s.start_time.slice(0,5)}–${s.end_time.slice(0,5)} — ${escapeHtml(internName)}</option>`;
+    }).join('');
+    fSalaSlot.disabled = false;
+  }
+
+  async function updateSalaPatientOptions() {
+    const slotVal = fSalaSlot.value;
+    fSalaPatient.innerHTML = '<option value="">Selecione...</option>';
+    confirmBtn.disabled = true;
+    previewText.textContent = 'Preencha os campos acima.';
+
+    if (!slotVal) { fSalaPatient.disabled = true; fSalaPatient.innerHTML = '<option value="">Escolha o dia e horário primeiro</option>'; return; }
+
+    const [weekdayStr, startTime] = slotVal.split('|');
+    const weekday = parseInt(weekdayStr);
+
+    const compatible = patientsList.filter(p => {
+      const availForPatient = (allPatientAvail || []).filter(a => a.patient_id === p.id);
+      if (availForPatient.length === 0) return true;
+      return availForPatient.some(a => a.weekday === weekday && a.start_time.slice(0, 5) === startTime.slice(0, 5));
+    });
+
+    if (compatible.length === 0) {
+      fSalaPatient.innerHTML = '<option value="">Nenhum paciente compatível com esse horário</option>';
+      fSalaPatient.disabled = true;
+      return;
+    }
+
+    fSalaPatient.innerHTML = '<option value="">Selecione...</option>' +
+      compatible.map(p => `<option value="${p.id}">#${escapeHtml(p.registration_number)} — ${escapeHtml(p.full_name || 'Sem nome')}</option>`).join('');
+    fSalaPatient.disabled = false;
+  }
+
+  function getCurrentSelection() {
+    if (apptMode === 'sala') {
+      const slotVal = fSalaSlot.value;
+      const patientId = fSalaPatient.value;
+      if (!slotVal || !patientId) return null;
+      const [weekdayStr, startTime, endTime, internId] = slotVal.split('|');
+      const roomObj = (roomsList || []).find(r => r.id === fSalaRoom.value);
+      return { patientId, internId, weekday: parseInt(weekdayStr), startTime, endTime, room: roomObj ? roomObj.name : null };
+    }
+    const slotVal = fSlot.value;
+    const patientId = fPatient.value;
+    const internId = fIntern.value;
+    if (!slotVal || !patientId || !internId) return null;
+    const [weekdayStr, startTime, endTime] = slotVal.split('|');
+    const room = document.getElementById('fRoom').value.trim() || null;
+    return { patientId, internId, weekday: parseInt(weekdayStr), startTime, endTime, room };
+  }
+
   async function calculatePreview() {
     msg.style.display = 'none';
     confirmBtn.disabled = true;
 
-    const patientId = fPatient.value;
-    const internId = fIntern.value;
-    const slotVal = fSlot.value;
+    const sel = getCurrentSelection();
     const startDateStr = fStartDate.value;
     const endDateStr = fEndDate.value;
 
-    if (!patientId || !internId || !slotVal || !startDateStr || !endDateStr) {
+    if (!sel || !startDateStr || !endDateStr) {
       previewText.textContent = 'Preencha todos os campos para calcular a prévia.';
       return;
     }
 
-    const [weekdayStr, startTime, endTime] = slotVal.split('|');
-    const weekday = parseInt(weekdayStr);
+    const { patientId, internId, weekday, startTime, endTime, room } = sel;
     const start = new Date(startDateStr + 'T00:00:00');
     const end = new Date(endDateStr + 'T00:00:00');
 
@@ -3449,7 +4063,6 @@ async function renderAgenda() {
 
     confirmBtn.onclick = async () => {
       confirmBtn.disabled = true; confirmBtn.textContent = 'Criando...';
-      const room = document.getElementById('fRoom').value.trim() || null;
 
       const { data: series, error: seriesErr } = await db.from('appointment_series').insert([{
         patient_id: patientId, intern_id: internId, weekday, start_time: startTime, end_time: endTime,
@@ -3487,6 +4100,9 @@ async function renderAgenda() {
   fPatient.addEventListener('change', updateInternOptions);
   fIntern.addEventListener('change', updateSlotOptions);
   [fSlot, fStartDate, fEndDate].forEach(el => el.addEventListener('change', calculatePreview));
+  fSalaRoom.addEventListener('change', updateSalaSlotOptions);
+  fSalaSlot.addEventListener('change', updateSalaPatientOptions);
+  fSalaPatient.addEventListener('change', calculatePreview);
 
   document.getElementById('newApptBtn').addEventListener('click', async () => {
     resetApptForm();
