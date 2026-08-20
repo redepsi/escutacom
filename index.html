@@ -538,6 +538,11 @@ function render() {
 // ---------------------------------------------------------------------------
 // PÁGINA: INÍCIO (coordenação e estagiário)
 // ---------------------------------------------------------------------------
+function formatHM(t) {
+  const [h, m] = t.slice(0, 5).split(':');
+  return m === '00' ? `${h}h` : `${h}h${m}`;
+}
+
 function toMinutes(t) {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
@@ -883,17 +888,17 @@ async function renderConfiguracoes() {
   let html = `<div class="schedule-head">Horário</div>` + WEEKDAYS.map(d => `<div class="schedule-head">${d.l}</div>`).join('');
 
   times.forEach(time => {
-    const hour = parseInt(time.split(':')[0]);
-    const endHour = String(hour + 1).padStart(2, '0') + 'h';
-    html += `<div><strong>${time.slice(0,2)}h – ${endHour}</strong></div>`;
+    const sampleSlot = slots.find(s => s.start_time.slice(0, 5) === time);
+    const label = sampleSlot ? `${formatHM(sampleSlot.start_time)} – ${formatHM(sampleSlot.end_time)}` : time;
+    html += `<div><strong>${label}</strong></div>`;
     WEEKDAYS.forEach(d => {
       const slot = slots.find(s => s.weekday === d.n && s.start_time.slice(0, 5) === time);
       if (!slot) { html += `<div></div>`; return; }
       const cls = slot.enabled ? 'slot-open' : 'slot-closed';
-      const label = slot.enabled ? '🟢 Liberado' : '⚪ Fechado';
+      const label2 = slot.enabled ? '🟢 Liberado' : '⚪ Fechado';
       html += `<div><button type="button" class="slot-btn ${cls}"
         data-id="${slot.id}" data-weekday="${slot.weekday}"
-        data-start="${slot.start_time}" data-end="${slot.end_time}">${label}</button></div>`;
+        data-start="${slot.start_time}" data-end="${slot.end_time}">${label2}</button></div>`;
     });
   });
 
@@ -1592,9 +1597,9 @@ function buildAvailabilityGrid(clinicSlots, selectedSlots) {
     WEEKDAYS.map(d => `<div class="schedule-head">${d.l}</div>`).join('');
 
   times.forEach(time => {
-    const hour = parseInt(time.split(':')[0]);
-    const endHour = String(hour + 1).padStart(2, '0') + 'h';
-    html += `<div><strong>${time.slice(0, 2)}h – ${endHour}</strong></div>`;
+    const sampleSlot = enabledSlots.find(s => s.start_time.slice(0, 5) === time);
+    const timeLabel = sampleSlot ? `${formatHM(sampleSlot.start_time)} – ${formatHM(sampleSlot.end_time)}` : time;
+    html += `<div><strong>${timeLabel}</strong></div>`;
     WEEKDAYS.forEach(d => {
       const slot = enabledSlots.find(s => s.weekday === d.n && s.start_time.slice(0, 5) === time);
       if (!slot) { html += `<div style="color:#d0d5dd;font-size:11px">Fechado</div>`; return; }
@@ -2469,9 +2474,9 @@ async function renderGradeGeral() {
       </tr>`;
 
     times.forEach(time => {
-      const hour = parseInt(time.split(':')[0]);
-      const endHour = String(hour + 1).padStart(2, '0') + 'h';
-      html += `<tr style="border-top:1px solid #eef0f3"><td style="padding:8px;font-weight:700;white-space:nowrap">${time.slice(0,2)}h–${endHour}</td>`;
+      const sampleSlot = clinicSlots.find(s => s.start_time.slice(0, 5) === time);
+      const timeLabel = sampleSlot ? `${formatHM(sampleSlot.start_time)}–${formatHM(sampleSlot.end_time)}` : time;
+      html += `<tr style="border-top:1px solid #eef0f3"><td style="padding:8px;font-weight:700;white-space:nowrap">${timeLabel}</td>`;
 
       WEEKDAYS.forEach(d => {
         const clinicOpen = clinicSlots.some(s => s.weekday === d.n && s.start_time.slice(0, 5) === time);
@@ -2733,7 +2738,7 @@ async function renderMapa() {
         </tr>`;
 
       times.forEach(time => {
-        html += `<tr style="border-top:1px solid #eef0f3"><td style="padding:8px;font-weight:700;white-space:nowrap">${time}h</td>`;
+        html += `<tr style="border-top:1px solid #eef0f3"><td style="padding:8px;font-weight:700;white-space:nowrap">${formatHM(time)}</td>`;
         rooms.forEach(room => {
           const match = withRoom.find(a => a.room === room.name && a.start_time.slice(0, 5) === time);
           if (!match) { html += `<td style="padding:8px;color:#c3c9d3;font-size:12px">—</td>`; return; }
