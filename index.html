@@ -1280,7 +1280,8 @@ async function renderEstagiarios() {
       <div id="internListWrap"><div class="placeholder">Carregando...</div></div>
     </section>
 
-    <section id="internFormPanel" class="panel" style="display:none">
+    <div id="internFormPanel" class="modal-overlay">
+      <div class="modal-box" style="width:min(620px,100%)">
       <div class="toolbar"><h2 id="internFormTitle">Novo estagiário</h2></div>
       <div id="internFormMsg" class="message"></div>
       <div class="field"><label>Nome completo *</label><input id="fName" placeholder="Nome completo"></div>
@@ -1308,7 +1309,8 @@ async function renderEstagiarios() {
         <button id="saveInternBtn" class="action">Salvar estagiário</button>
         <button id="cancelInternBtn" class="action secondary">Cancelar</button>
       </div>
-    </section>`;
+      </div>
+    </div>`;
 
   // ---- Período letivo e avanço de semestre ----
   const periodMsg = document.getElementById('periodMsg');
@@ -1370,6 +1372,8 @@ async function renderEstagiarios() {
   const msg = document.getElementById('internFormMsg');
   let editingId = null;
   let internsCache = [];
+  let internPage = 1;
+  let internPageSize = 20;
 
   async function loadList() {
     const { data: interns, error: internsErr } = await db.from('interns').select('*');
@@ -1399,7 +1403,13 @@ async function renderEstagiarios() {
       return;
     }
 
-    const rows = internsCache.map(i => {
+    const effectivePageSize = internPageSize === 'all' ? internsCache.length : internPageSize;
+    const totalPages = Math.max(1, Math.ceil(internsCache.length / effectivePageSize));
+    if (internPage > totalPages) internPage = totalPages;
+    const startIdx = (internPage - 1) * effectivePageSize;
+    const pageItems = internPageSize === 'all' ? internsCache : internsCache.slice(startIdx, startIdx + effectivePageSize);
+
+    const rows = pageItems.map(i => {
       const wa = whatsappLink(i.whatsapp);
       const waHtml = wa ? `<a href="${wa}" target="_blank" rel="noopener">${escapeHtml(i.whatsapp)}</a>` : (escapeHtml(i.whatsapp) || '—');
       const statusBadge = i.status === 'ativo'
@@ -1425,7 +1435,33 @@ async function renderEstagiarios() {
     wrap.innerHTML = `<div style="overflow:auto"><table style="width:100%;border-collapse:collapse">
       <tr style="text-align:left;font-size:12px;color:#667085">
         <th style="padding:10px 8px">Nome / E-mail</th><th>Matrícula</th><th>WhatsApp</th><th>Supervisor</th><th>Semestre</th><th>Status</th><th>Ações</th>
-      </tr>${rows}</table></div>`;
+      </tr>${rows}</table></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-top:14px">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <span class="muted">Por página:</span>
+          <select id="internPageSizeSelect" style="padding:6px 10px;border:1px solid #d5dbe4;border-radius:8px">
+            <option value="10" ${internPageSize === 10 ? 'selected' : ''}>10</option>
+            <option value="20" ${internPageSize === 20 ? 'selected' : ''}>20</option>
+            <option value="50" ${internPageSize === 50 ? 'selected' : ''}>50</option>
+            <option value="100" ${internPageSize === 100 ? 'selected' : ''}>100</option>
+            <option value="all" ${internPageSize === 'all' ? 'selected' : ''}>Todos</option>
+          </select>
+          <span class="muted">${internsCache.length} estagiário(s)</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button id="internPrevPage" class="action secondary" style="padding:6px 12px" ${internPage <= 1 ? 'disabled' : ''}>◀</button>
+          <span style="font-size:13px">Página ${internPage} de ${totalPages}</span>
+          <button id="internNextPage" class="action secondary" style="padding:6px 12px" ${internPage >= totalPages ? 'disabled' : ''}>▶</button>
+        </div>
+      </div>`;
+
+    document.getElementById('internPageSizeSelect').addEventListener('change', (e) => {
+      internPageSize = e.target.value === 'all' ? 'all' : parseInt(e.target.value);
+      internPage = 1;
+      loadList();
+    });
+    document.getElementById('internPrevPage').addEventListener('click', () => { internPage--; loadList(); });
+    document.getElementById('internNextPage').addEventListener('click', () => { internPage++; loadList(); });
 
     wrap.querySelectorAll('.edit-intern').forEach(btn => {
       btn.addEventListener('click', () => openForm(internsCache.find(i => i.id === btn.dataset.id)));
@@ -1510,8 +1546,7 @@ async function renderEstagiarios() {
         historyWrap.style.display = 'block';
       }
     }
-    panel.style.display = 'block';
-    panel.scrollIntoView({ behavior: 'smooth' });
+    panel.style.display = 'flex';
   }
 
   document.getElementById('newInternBtn').addEventListener('click', () => openForm(null));
@@ -1764,7 +1799,8 @@ async function renderPacientes() {
       <div id="importPreviewWrap" style="margin-top:14px"></div>
     </section>
 
-    <section id="patientFormPanel" class="panel" style="display:none">
+    <div id="patientFormPanel" class="modal-overlay">
+      <div class="modal-box" style="width:min(680px,100%)">
       <div class="toolbar"><h2 id="patientFormTitle">Novo paciente</h2></div>
       <div id="patientFormMsg" class="message"></div>
       <div class="field"><label>Número de inscrição</label><input id="pReg" readonly style="background:#f3f4f6;color:#667085"></div>
@@ -1808,7 +1844,8 @@ async function renderPacientes() {
         <button id="savePatientBtn" class="action">Salvar paciente</button>
         <button id="cancelPatientBtn" class="action secondary">Cancelar</button>
       </div>
-    </section>`;
+      </div>
+    </div>`;
 
   const wrap = document.getElementById('patientListWrap');
   const panel = document.getElementById('patientFormPanel');
@@ -1825,6 +1862,8 @@ async function renderPacientes() {
   clinicSlotsCache = clinicSlots || [];
 
   let situationFilter = 'ativos';
+  let patientPage = 1;
+  let patientPageSize = 20;
 
   async function loadList() {
     const { data, error } = await db.from('patients').select('*').order('registration_number', { ascending: true });
@@ -1870,6 +1909,12 @@ async function renderPacientes() {
       return;
     }
 
+    const effectivePageSize = patientPageSize === 'all' ? filtered.length : patientPageSize;
+    const totalPages = Math.max(1, Math.ceil(filtered.length / effectivePageSize));
+    if (patientPage > totalPages) patientPage = totalPages;
+    const startIdx = (patientPage - 1) * effectivePageSize;
+    const pageItems = patientPageSize === 'all' ? filtered : filtered.slice(startIdx, startIdx + effectivePageSize);
+
     const STATUS_BADGES = {
       ativo: '<span style="color:#2f855a;font-weight:700">Ativo</span>',
       inativo: '<span style="color:#b42318;font-weight:700">Inativo</span>',
@@ -1879,7 +1924,7 @@ async function renderPacientes() {
       sem_encaixe: '<span style="color:#667085;font-weight:700">Sem encaixe</span>'
     };
 
-    const rows = filtered.map(p => {
+    const rows = pageItems.map(p => {
       const statusBadge = STATUS_BADGES[p.status] || p.status;
       const situacao = p.status === 'inativo'
         ? `<span class="muted">Fora da clínica</span>`
@@ -1916,7 +1961,33 @@ async function renderPacientes() {
     wrap.innerHTML = `<div style="overflow:auto;font-size:13px"><table style="width:100%;border-collapse:collapse;font-size:13px">
       <tr style="text-align:left;font-size:12px;color:#667085">
         <th style="padding:10px 8px">Inscrição</th><th>Nome</th><th>WhatsApp</th><th>Origem</th><th>Disponibilidade</th><th>Situação</th><th>Status</th><th>Ações</th>
-      </tr>${rows}</table></div>`;
+      </tr>${rows}</table></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-top:14px">
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+          <span class="muted">Por página:</span>
+          <select id="patientPageSizeSelect" style="padding:6px 10px;border:1px solid #d5dbe4;border-radius:8px">
+            <option value="10" ${patientPageSize === 10 ? 'selected' : ''}>10</option>
+            <option value="20" ${patientPageSize === 20 ? 'selected' : ''}>20</option>
+            <option value="50" ${patientPageSize === 50 ? 'selected' : ''}>50</option>
+            <option value="100" ${patientPageSize === 100 ? 'selected' : ''}>100</option>
+            <option value="all" ${patientPageSize === 'all' ? 'selected' : ''}>Todos</option>
+          </select>
+          <span class="muted">${filtered.length} paciente(s)</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button id="patientPrevPage" class="action secondary" style="padding:6px 12px" ${patientPage <= 1 ? 'disabled' : ''}>◀</button>
+          <span style="font-size:13px">Página ${patientPage} de ${totalPages}</span>
+          <button id="patientNextPage" class="action secondary" style="padding:6px 12px" ${patientPage >= totalPages ? 'disabled' : ''}>▶</button>
+        </div>
+      </div>`;
+
+    document.getElementById('patientPageSizeSelect').addEventListener('change', (e) => {
+      patientPageSize = e.target.value === 'all' ? 'all' : parseInt(e.target.value);
+      patientPage = 1;
+      loadList();
+    });
+    document.getElementById('patientPrevPage').addEventListener('click', () => { patientPage--; loadList(); });
+    document.getElementById('patientNextPage').addEventListener('click', () => { patientPage++; loadList(); });
 
     wrap.querySelectorAll('.edit-patient').forEach(btn => {
       btn.addEventListener('click', () => openForm(patientsCache.find(p => p.id === btn.dataset.id)));
@@ -1953,6 +2024,7 @@ async function renderPacientes() {
     btn.classList.toggle('active', btn.dataset.v === situationFilter);
     btn.addEventListener('click', () => {
       situationFilter = btn.dataset.v;
+      patientPage = 1;
       document.querySelectorAll('.situation-filter').forEach(b => b.classList.toggle('active', b.dataset.v === situationFilter));
       loadList();
     });
@@ -2048,8 +2120,7 @@ async function renderPacientes() {
       bindAvailabilityToggles(availGridEl);
       renderFutureAvailList();
     }
-    panel.style.display = 'block';
-    panel.scrollIntoView({ behavior: 'smooth' });
+    panel.style.display = 'flex';
   }
 
   document.getElementById('newPatientBtn').addEventListener('click', () => openForm(null));
