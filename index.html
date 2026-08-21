@@ -612,6 +612,32 @@ function timesOverlap(startA, endA, startB, endB) {
   return toMinutes(startA) < toMinutes(endB) && toMinutes(startB) < toMinutes(endA);
 }
 
+// Verifica se a sala já está ocupada por OUTRO paciente/estagiário nas datas/horário informados.
+// É só aviso — nunca bloqueia, ao contrário do conflito de estagiário/paciente.
+async function checkRoomConflicts(room, dateStrings, startTime, endTime, excludeSeriesId = null, excludeApptId = null) {
+  if (!room || !dateStrings || dateStrings.length === 0) return [];
+  const { data } = await db.from('appointments')
+    .select('id, appointment_date, start_time, end_time, series_id, patients(registration_number, full_name)')
+    .eq('room', room).in('appointment_date', dateStrings).eq('status', 'agendado');
+  return (data || []).filter(c => {
+    if (excludeApptId && c.id === excludeApptId) return false;
+    if (excludeSeriesId && c.series_id === excludeSeriesId) return false;
+    return timesOverlap(c.start_time, c.end_time, startTime, endTime);
+  });
+}
+
+function roomConflictWarningHtml(conflicts, room) {
+  if (!conflicts || conflicts.length === 0) return '';
+  const examples = conflicts.slice(0, 3).map(c => {
+    const patLabel = c.patients ? `#${c.patients.registration_number} ${c.patients.full_name || ''}` : '—';
+    return `${fmtBr(c.appointment_date)} ${c.start_time.slice(0,5)}–${c.end_time.slice(0,5)} com ${escapeHtml(patLabel)}`;
+  }).join('; ');
+  return `<div class="message error" style="display:block;background:#fff5d8;color:#8a5b00;margin-top:10px">
+    ⚠️ A sala "${escapeHtml(room)}" já tem ${conflicts.length} atendimento(s) marcado(s) nesse(s) dia/horário — ${examples}${conflicts.length > 3 ? '...' : ''}.
+    Isso é só um aviso, você pode confirmar mesmo assim.
+  </div>`;
+}
+
 // Mantém o ensalamento em dia com o agendamento: se um agendamento define uma
 // sala, garante que aquele estagiário fique ensalado ali (perguntando antes
 // de sobrescrever, se já houver outro estagiário ensalado no mesmo horário).
@@ -1969,15 +1995,15 @@ async function renderPacientes() {
       <div style="margin-bottom:14px">
         <input id="patientSearchInput" type="text" placeholder="Buscar por nome, inscrição, WhatsApp ou origem..." style="width:100%;max-width:420px;padding:10px 14px;border:1px solid #d5dbe4;border-radius:9px;font-size:14px">
       </div>
-      <div style="display:flex;gap:6px;margin-bottom:14px">
-        <button class="action secondary situation-filter" data-v="ativos">Ativos</button>
-        <button class="action secondary situation-filter" data-v="agendado">Agendados</button>
-        <button class="action secondary situation-filter" data-v="espera">Na espera</button>
-        <button class="action secondary situation-filter" data-v="contato">Em contato</button>
-        <button class="action secondary situation-filter" data-v="sem_encaixe">Sem encaixe</button>
-        <button class="action secondary situation-filter" data-v="pausados">Pausados</button>
-        <button class="action secondary situation-filter" data-v="alta">Alta</button>
-        <button class="action secondary situation-filter" data-v="inativos">Inativos</button>
+      <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+        <button class="action secondary situation-filter" data-v="ativos">Ativos <span class="filter-count" data-count="ativos"></span></button>
+        <button class="action secondary situation-filter" data-v="agendado">Agendados <span class="filter-count" data-count="agendado"></span></button>
+        <button class="action secondary situation-filter" data-v="espera">Na espera <span class="filter-count" data-count="espera"></span></button>
+        <button class="action secondary situation-filter" data-v="contato">Em contato <span class="filter-count" data-count="contato"></span></button>
+        <button class="action secondary situation-filter" data-v="sem_encaixe">Sem encaixe <span class="filter-count" data-count="sem_encaixe"></span></button>
+        <button class="action secondary situation-filter" data-v="pausados">Pausados <span class="filter-count" data-count="pausados"></span></button>
+        <button class="action secondary situation-filter" data-v="alta">Alta <span class="filter-count" data-count="alta"></span></button>
+        <button class="action secondary situation-filter" data-v="inativos">Inativos <span class="filter-count" data-count="inativos"></span></button>
       </div>
       <div id="patientListWrap"><div class="placeholder">Carregando...</div></div>
     </section>
@@ -2085,6 +2111,22 @@ async function renderPacientes() {
     });
 
     const scheduledSet = new Set((activeSeries || []).map(s => s.patient_id));
+
+    const counts = { ativos: 0, agendado: 0, espera: 0, contato: 0, sem_encaixe: 0, pausados: 0, alta: 0, inativos: 0 };
+    patientsCache.forEach(p => {
+      if (p.status === 'inativo') { counts.inativos++; return; }
+      if (p.status === 'pausado') { counts.pausados++; return; }
+      if (p.status === 'alta') { counts.alta++; return; }
+      if (p.status === 'em_contato') { counts.contato++; return; }
+      if (p.status === 'sem_encaixe') { counts.sem_encaixe++; return; }
+      if (p.status === 'ativo') {
+        counts.ativos++;
+        if (scheduledSet.has(p.id)) counts.agendado++; else counts.espera++;
+      }
+    });
+    document.querySelectorAll('.filter-count').forEach(el => {
+      el.textContent = `(${counts[el.dataset.count] || 0})`;
+    });
 
     const internIdsForExport = [...new Set((activeSeries || []).map(s => s.intern_id))];
     const { data: internProfilesForExport } = internIdsForExport.length
@@ -2605,6 +2647,7 @@ async function renderPatientFicha(patientId, returnPage = 'pacientes') {
       <div style="display:flex;gap:10px;margin-bottom:14px">
         <button id="backFromFicha" class="action secondary">← Voltar</button>
         ${isCoord ? `<button id="editFromFicha" class="action secondary" data-id="${patient.id}">Editar paciente</button>` : ''}
+        <button id="printFichaBtn" class="action secondary">🖨️ Imprimir</button>
       </div>
       <h2 style="margin-top:0">Ficha do paciente #${escapeHtml(patient.registration_number)}</h2>
       <div class="muted" style="margin-bottom:16px">${escapeHtml(patient.full_name || 'Nome não informado')} ${patient.origin ? '· ' + escapeHtml(patient.origin) : ''}</div>
@@ -2635,6 +2678,30 @@ async function renderPatientFicha(patientId, returnPage = 'pacientes') {
     </section>`;
 
   document.getElementById('backFromFicha').addEventListener('click', () => { currentPage = returnPage; render(); });
+
+  document.getElementById('printFichaBtn').addEventListener('click', () => {
+    const printRows = all.map(a => {
+      const isCancelled = a.status === 'cancelado';
+      const attLabel = { pendente: 'Pendente', presente: 'Presente', ausente: 'Ausente', cancelado: 'Cancelado' }[a.attendance_status];
+      const reason = a.cancellation_reason ? CANCELLATION_REASON_LABELS[a.cancellation_reason] || a.cancellation_reason : '';
+      const situacao = isCancelled ? `Cancelado (${a.cancelled_by || ''}${reason ? ' — ' + reason : ''})` : attLabel;
+      return `<tr>
+        <td>${fmtBr(a.appointment_date)}</td><td>${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}</td>
+        <td>${escapeHtml(nameById[a.intern_id] || '?')}</td><td>${situacao}</td>
+      </tr>`;
+    }).join('');
+    const body = `
+      <div class="meta">${escapeHtml(patient.full_name || 'Nome não informado')} ${patient.origin ? '· ' + escapeHtml(patient.origin) : ''}${patient.whatsapp ? ' · ' + escapeHtml(patient.whatsapp) : ''}</div>
+      <table>
+        <tr><th>Agendados (futuros)</th><td>${totalAgendado}</td></tr>
+        <tr><th>Presenças</th><td>${presentes}</td></tr>
+        <tr><th>Faltas</th><td>${ausentes}</td></tr>
+        <tr><th>Cancelados</th><td>${cancelados}</td></tr>
+      </table>
+      <h3>Histórico de atendimentos</h3>
+      <table><tr><th>Data</th><th>Horário</th><th>Estagiário</th><th>Situação</th></tr>${printRows}</table>`;
+    exportReportPdf(`Ficha do paciente #${patient.registration_number}`, body);
+  });
 
   const editBtn = document.getElementById('editFromFicha');
   if (editBtn) {
@@ -2996,7 +3063,9 @@ async function renderGradeGeral() {
     getEffectiveClinicSlots(),
     db.from('interns').select('*').eq('status', 'ativo')
   ]);
-  const clinicSlots = clinicSlotsAll.filter(s => s.enabled);
+  let clinicSlots = clinicSlotsAll.filter(s => s.enabled);
+
+  const { data: locations } = await db.from('locations').select('*').order('name');
 
   if (!clinicSlots || clinicSlots.length === 0) {
     gridWrap.innerHTML = `<div class="placeholder">Nenhum horário liberado em nenhuma sala ainda. Configure em "Mapa de Salas".</div>`;
@@ -3008,15 +3077,23 @@ async function renderGradeGeral() {
   }
 
   const internIds = interns.map(i => i.id);
-  const [{ data: profiles }, { data: allAvail }, { data: activeSeries }] = await Promise.all([
+  const [{ data: profiles }, { data: allAvail }, { data: activeSeries }, { data: allLocationPrefs }] = await Promise.all([
     db.from('profiles').select('id, full_name').in('id', internIds),
     db.from('intern_availability').select('*').in('intern_id', internIds),
-    db.from('appointment_series').select('intern_id, weekday, start_time').in('intern_id', internIds).eq('status', 'ativa')
+    db.from('appointment_series').select('intern_id, weekday, start_time').in('intern_id', internIds).eq('status', 'ativa'),
+    db.from('intern_location_preferences').select('intern_id, location_id').in('intern_id', internIds)
   ]);
 
   const occupiedKey = (internId, weekday, startTime) => `${internId}_${weekday}_${startTime}`;
   const occupiedSet = new Set((activeSeries || []).map(s => occupiedKey(s.intern_id, s.weekday, s.start_time)));
   const internIdsWithPatient = new Set((activeSeries || []).map(s => s.intern_id));
+
+  const internsWithAnyLocPref = new Set((allLocationPrefs || []).map(p => p.intern_id));
+  function isWillingForLocation(internId, locationId) {
+    if (!locationId) return true; // "Todas as localizações" — não filtra por disposição
+    if (!internsWithAnyLocPref.has(internId)) return true; // nunca marcou preferência = topa qualquer uma
+    return (allLocationPrefs || []).some(p => p.intern_id === internId && p.location_id === locationId);
+  }
 
   const nameById = {};
   (profiles || []).forEach(p => { nameById[p.id] = p.full_name; });
@@ -3025,6 +3102,12 @@ async function renderGradeGeral() {
 
   let selectedInternIds = new Set(internsList.map(i => i.id)); // começa com todos marcados
   let onlyWithoutPatients = false;
+  let selectedLocationId = '';
+
+  async function refreshClinicSlotsForLocation() {
+    const all = selectedLocationId ? await getEffectiveClinicSlots([selectedLocationId]) : await getEffectiveClinicSlots();
+    clinicSlots = all.filter(s => s.enabled);
+  }
 
   function renderFilter() {
     const allSelected = selectedInternIds.size === internsList.length;
@@ -3032,6 +3115,10 @@ async function renderGradeGeral() {
 
     filterWrap.innerHTML = `
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <select id="locationFilterSelect" style="padding:10px 14px;border:1px solid #d5dbe4;border-radius:9px;font-size:13px;font-weight:700">
+          <option value="">Todas as localizações</option>
+          ${(locations || []).map(l => `<option value="${l.id}" ${selectedLocationId === l.id ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('')}
+        </select>
         <div style="position:relative;display:inline-block">
           <button type="button" id="internFilterToggle" class="action secondary">${label} ▾</button>
           <div id="internFilterPanel" style="display:none;position:absolute;top:110%;left:0;background:#fff;
@@ -3054,6 +3141,12 @@ async function renderGradeGeral() {
         <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#e9f7ef;border:1px solid #bce3cc;margin-right:5px"></span>Disponível</span>
         <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:#fff4d6;border:1px solid #f0d38a;margin-right:5px"></span>Já tem atendimento fixo</span>
       </div>`;
+
+    document.getElementById('locationFilterSelect').addEventListener('change', async (e) => {
+      selectedLocationId = e.target.value;
+      await refreshClinicSlotsForLocation();
+      renderGrid();
+    });
 
     document.getElementById('filterWithoutPatients').addEventListener('change', (e) => {
       onlyWithoutPatients = e.target.checked;
@@ -3107,7 +3200,8 @@ async function renderGradeGeral() {
 
         const matches = (allAvail || []).filter(a =>
           a.weekday === d.n && a.start_time.slice(0, 5) === time && selectedInternIds.has(a.intern_id) &&
-          (!onlyWithoutPatients || !internIdsWithPatient.has(a.intern_id))
+          (!onlyWithoutPatients || !internIdsWithPatient.has(a.intern_id)) &&
+          isWillingForLocation(a.intern_id, selectedLocationId)
         );
 
         if (matches.length === 0) {
@@ -3227,47 +3321,78 @@ async function renderMapa() {
   content.innerHTML = `
     <section class="panel">
       <div class="toolbar">
-        <div><h2>Localizações</h2><div class="muted">Os endereços onde a clínica atende. Cada sala pertence a uma localização.</div></div>
+        <div><h2>Mapa de Salas</h2><div class="muted">Veja quem está em cada sala no dia a dia, ou gerencie localizações e salas.</div></div>
       </div>
-      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
-        <div class="field" style="margin-bottom:0"><label>Nome da localização</label><input id="newLocationName" placeholder="Ex.: Sede, Anexo"></div>
-        <div class="field" style="margin-bottom:0"><label>Endereço</label><input id="newLocationAddress" placeholder="Ex.: Rua X, 123"></div>
-        <button id="addLocationBtn" class="action">+ Adicionar localização</button>
+      <div style="display:flex;gap:4px">
+        <button class="action secondary mapa-tab-btn" data-tab="visualizar">Visualizar</button>
+        <button class="action secondary mapa-tab-btn" data-tab="gerenciar">Gerenciar localizações e salas</button>
       </div>
-      <div id="locationsMsg" class="message"></div>
-      <div id="locationsListWrap"><div class="placeholder">Carregando...</div></div>
     </section>
 
-    <section class="panel">
-      <div class="toolbar">
-        <div><h2>Salas de atendimento</h2><div class="muted">Cada sala tem seu próprio horário e os estagiários ensalados nela.</div></div>
-      </div>
-      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
-        <div class="field" style="margin-bottom:0"><label>Nome da sala</label><input id="newRoomName" placeholder="Ex.: Sala 3"></div>
-        <div class="field" style="margin-bottom:0"><label>Localização</label><select id="newRoomLocation"><option value="">Selecione...</option></select></div>
-        <button id="addRoomBtn" class="action">+ Adicionar sala</button>
-      </div>
-      <div id="roomsMsg" class="message"></div>
-      <div id="roomsListWrap"><div class="placeholder">Carregando...</div></div>
-    </section>
-
-    <section class="panel">
-      <div class="toolbar">
-        <div><h2>Quem está em cada sala</h2><div class="muted">Ensalamento e atendimentos agendados, por sala.</div></div>
-      </div>
-      <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
-        <div style="display:flex;gap:4px">
-          <button class="action secondary mapa-view-btn" data-v="dia">Dia</button>
-          <button class="action secondary mapa-view-btn" data-v="semana">Semana</button>
+    <div id="mapaTabGerenciar" style="display:none">
+      <section class="panel">
+        <div class="toolbar">
+          <div><h2>Localizações</h2><div class="muted">Os endereços onde a clínica atende. Cada sala pertence a uma localização.</div></div>
         </div>
-        <button id="mapaPrevDay" class="action secondary">◀</button>
-        <div id="mapaDayLabel" style="font-weight:700;min-width:200px;text-align:center"></div>
-        <button id="mapaNextDay" class="action secondary">▶</button>
-        <button id="mapaTodayBtn" class="action secondary">Hoje</button>
-        <button id="printEnsalamentoBtn" class="action secondary">🖨️ Imprimir ensalamento do dia</button>
-      </div>
-      <div id="mapaGridWrap"><div class="placeholder">Carregando...</div></div>
-    </section>`;
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
+          <div class="field" style="margin-bottom:0"><label>Nome da localização</label><input id="newLocationName" placeholder="Ex.: Sede, Anexo"></div>
+          <div class="field" style="margin-bottom:0"><label>Endereço</label><input id="newLocationAddress" placeholder="Ex.: Rua X, 123"></div>
+          <button id="addLocationBtn" class="action">+ Adicionar localização</button>
+        </div>
+        <div id="locationsMsg" class="message"></div>
+        <div id="locationsListWrap"><div class="placeholder">Carregando...</div></div>
+      </section>
+
+      <section class="panel">
+        <div class="toolbar">
+          <div><h2>Salas de atendimento</h2><div class="muted">Cada sala tem seu próprio horário e os estagiários ensalados nela.</div></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
+          <div class="field" style="margin-bottom:0"><label>Nome da sala</label><input id="newRoomName" placeholder="Ex.: Sala 3"></div>
+          <div class="field" style="margin-bottom:0"><label>Localização</label><select id="newRoomLocation"><option value="">Selecione...</option></select></div>
+          <button id="addRoomBtn" class="action">+ Adicionar sala</button>
+        </div>
+        <div id="roomsMsg" class="message"></div>
+        <div id="roomsListWrap"><div class="placeholder">Carregando...</div></div>
+      </section>
+    </div>
+
+    <div id="mapaTabVisualizar">
+      <section class="panel">
+        <div class="toolbar">
+          <div><h2>Quem está em cada sala</h2><div class="muted">Ensalamento e atendimentos agendados, por sala.</div></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+          <div style="display:flex;gap:4px">
+            <button class="action secondary mapa-view-btn" data-v="dia">Dia</button>
+            <button class="action secondary mapa-view-btn" data-v="semana">Semana</button>
+          </div>
+          <button id="mapaPrevDay" class="action secondary">◀</button>
+          <div id="mapaDayLabel" style="font-weight:700;min-width:200px;text-align:center"></div>
+          <button id="mapaNextDay" class="action secondary">▶</button>
+          <button id="mapaTodayBtn" class="action secondary">Hoje</button>
+          <select id="mapaLocationFilter" style="padding:10px 14px;border:1px solid #d5dbe4;border-radius:9px;font-size:13px;font-weight:700">
+            <option value="">Todas as localizações</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;background:#f8fafc;border:1px solid #e5e9ef;padding:8px 12px;border-radius:8px;cursor:pointer">
+            <input type="checkbox" id="mapaOnlyWithAppts"> Com agendamento
+          </label>
+          <button id="printEnsalamentoBtn" class="action secondary">🖨️ Imprimir ensalamento do dia</button>
+        </div>
+        <div id="mapaGridWrap"><div class="placeholder">Carregando...</div></div>
+      </section>
+    </div>`;
+
+  let mapaTab = 'visualizar';
+  document.querySelectorAll('.mapa-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === mapaTab);
+    btn.addEventListener('click', () => {
+      mapaTab = btn.dataset.tab;
+      document.querySelectorAll('.mapa-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === mapaTab));
+      document.getElementById('mapaTabVisualizar').style.display = mapaTab === 'visualizar' ? 'block' : 'none';
+      document.getElementById('mapaTabGerenciar').style.display = mapaTab === 'gerenciar' ? 'block' : 'none';
+    });
+  });
 
   const roomsMsg = document.getElementById('roomsMsg');
   const locationsMsg = document.getElementById('locationsMsg');
@@ -3667,6 +3792,15 @@ async function renderMapa() {
   });
   document.getElementById('mapaTodayBtn').addEventListener('click', () => { mapaAnchorDate = new Date(); loadMapaGrid(); });
 
+  let mapaSelectedLocationId = '';
+  let mapaLocationSelectPopulated = false;
+  let mapaOnlyWithAppts = false;
+
+  document.getElementById('mapaOnlyWithAppts').addEventListener('change', (e) => {
+    mapaOnlyWithAppts = e.target.checked;
+    loadMapaGrid();
+  });
+
   async function loadMapaGrid() {
     const gridWrap = document.getElementById('mapaGridWrap');
 
@@ -3681,16 +3815,35 @@ async function renderMapa() {
     }
     const startStr = toDateStr(rangeStart), endStr = toDateStr(rangeEnd);
 
-    const [{ data: rooms }, { data: allSlots }, { data: allStaffing }, { data: appts }] = await Promise.all([
+    const [{ data: allRooms }, { data: allSlots }, { data: allStaffing }, { data: appts }, { data: mapaLocations }] = await Promise.all([
       db.from('rooms').select('*').order('name'),
       db.from('room_schedule_slots').select('*').eq('enabled', true),
       db.from('room_staffing').select('*'),
       db.from('appointments').select('appointment_date, start_time, end_time, room, patient_id, intern_id, status, patients(registration_number, full_name)')
-        .gte('appointment_date', startStr).lte('appointment_date', endStr).eq('status', 'agendado')
+        .gte('appointment_date', startStr).lte('appointment_date', endStr).eq('status', 'agendado'),
+      db.from('locations').select('*').order('name')
     ]);
 
+    const locationSelect = document.getElementById('mapaLocationFilter');
+    if (locationSelect && !mapaLocationSelectPopulated) {
+      mapaLocationSelectPopulated = true;
+      locationSelect.innerHTML = '<option value="">Todas as localizações</option>' +
+        (mapaLocations || []).map(l => `<option value="${l.id}" ${mapaSelectedLocationId === l.id ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('');
+      locationSelect.addEventListener('change', (e) => {
+        mapaSelectedLocationId = e.target.value;
+        loadMapaGrid();
+      });
+    }
+
+    let rooms = mapaSelectedLocationId ? (allRooms || []).filter(r => r.location_id === mapaSelectedLocationId) : (allRooms || []);
+
+    if (mapaOnlyWithAppts) {
+      const roomNamesWithAppts = new Set((appts || []).filter(a => a.room).map(a => a.room));
+      rooms = rooms.filter(r => roomNamesWithAppts.has(r.name));
+    }
+
     if (!rooms || rooms.length === 0) {
-      gridWrap.innerHTML = `<div class="placeholder">Cadastre ao menos uma sala acima para ver o mapa.</div>`;
+      gridWrap.innerHTML = `<div class="placeholder">${mapaOnlyWithAppts ? 'Nenhuma sala com agendamento neste período.' : mapaSelectedLocationId ? 'Nenhuma sala cadastrada nessa localização.' : 'Cadastre ao menos uma sala acima para ver o mapa.'}</div>`;
       return;
     }
 
@@ -3839,6 +3992,7 @@ async function renderAgenda() {
           <select id="filterIntern" class="context-select" style="font-weight:normal;font-size:13px"></select>
           <select id="filterPatient" class="context-select" style="font-weight:normal;font-size:13px"></select>
         </div>
+        <button id="printSemanaBtn" class="action secondary">🖨️ Imprimir agendados da semana</button>
       </div>
 
       <div id="agendaListWrap"><div class="placeholder">Carregando...</div></div>
@@ -4058,10 +4212,11 @@ async function renderAgenda() {
          <button class="action secondary open-appt-detail-btn" data-id="${a.id}" style="padding:3px 8px;font-size:11px;margin-left:6px">Editar</button>`
       : `<button class="action secondary open-appt-detail-btn" data-id="${a.id}" style="padding:4px 8px;font-size:12px">Editar</button>`;
 
-    const horarioCell = `${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}${a.room ? `<br><small class="muted">${escapeHtml(a.room)}</small>` : ''}`;
+    const roomCell = a.room ? escapeHtml(a.room) : '<span class="muted">—</span>';
 
     return `<tr style="${isCancelled ? 'opacity:.6' : ''}">
-      <td style="padding:6px 8px">${horarioCell}</td>
+      <td style="padding:6px 8px">${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}</td>
+      <td style="text-align:left">${roomCell}</td>
       <td>${patCell}</td>
       <td>${internCell}</td>
       <td>${presCell}</td>
@@ -4081,10 +4236,10 @@ async function renderAgenda() {
       return `<div style="margin:16px 0 6px;font-weight:700;text-transform:capitalize">${weekdayLabel}, ${fmtBr(date)}</div>
         <table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed">
         <colgroup>
-          <col style="width:12%"><col style="width:27%"><col style="width:27%"><col style="width:18%"><col style="width:16%">
+          <col style="width:10%"><col style="width:14%"><col style="width:24%"><col style="width:24%"><col style="width:14%"><col style="width:14%">
         </colgroup>
         <tr style="text-align:left;font-size:12px;color:#667085">
-          <th style="padding:6px 8px">Horário</th><th style="text-align:left">Paciente</th><th style="text-align:left">Estagiário</th><th>Presença</th><th>Ações</th>
+          <th style="padding:6px 8px">Horário</th><th style="text-align:left">Sala</th><th style="text-align:left">Paciente</th><th style="text-align:left">Estagiário</th><th>Presença</th><th>Ações</th>
         </tr>${rows}</table>`;
     }).join('');
   }
@@ -4104,6 +4259,54 @@ async function renderAgenda() {
 
     const { data: appts, error } = await query;
     if (error) { listWrap.innerHTML = `<div class="message error" style="display:block">Erro: ${escapeHtml(error.message)}</div>`; return; }
+
+    const printBtn = document.getElementById('printSemanaBtn');
+    if (printBtn) {
+      printBtn.onclick = async () => {
+        const weekRange = getDateRange('semana', agendaAnchor);
+        const weekStartStr = toDateStr(weekRange.start);
+        const weekEndStr = toDateStr(weekRange.end);
+
+        let weekQuery = db.from('appointments')
+          .select('appointment_date, start_time, end_time, room, patient_id, intern_id, patient_confirmation, intern_confirmation, is_first_session, patients(registration_number, full_name)')
+          .gte('appointment_date', weekStartStr).lte('appointment_date', weekEndStr)
+          .eq('status', 'agendado')
+          .order('appointment_date').order('start_time');
+
+        if (agendaInternFilter !== 'todos') weekQuery = weekQuery.eq('intern_id', agendaInternFilter);
+        if (agendaPatientFilter !== 'todos') weekQuery = weekQuery.eq('patient_id', agendaPatientFilter);
+
+        const { data: agendados } = await weekQuery;
+
+        if (!agendados || agendados.length === 0) { alert('Nenhum atendimento agendado para essa semana.'); return; }
+
+        const internIdsForPrint = [...new Set(agendados.map(a => a.intern_id))];
+        const { data: profilesForPrint } = internIdsForPrint.length
+          ? await db.from('profiles').select('id, full_name').in('id', internIdsForPrint)
+          : { data: [] };
+        const nameByIdForPrint = {};
+        (profilesForPrint || []).forEach(p => { nameByIdForPrint[p.id] = p.full_name; });
+
+        const confLabels = { aguardando: 'Aguardando', confirmado: 'Confirmado', nao_confirmado: 'Não confirmado' };
+
+        const rows = agendados.map(a => {
+          const patLabel = a.patients ? `#${a.patients.registration_number} ${a.patients.full_name || ''}` : '—';
+          const patConfCell = a.is_first_session ? confLabels[a.patient_confirmation] : '— (não se aplica)';
+          const internConfCell = a.is_first_session ? confLabels[a.intern_confirmation] : '— (não se aplica)';
+          return `<tr>
+            <td>${dateWithWeekday(a.appointment_date)}</td><td>${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}</td>
+            <td>${escapeHtml(a.room || '—')}</td><td>${escapeHtml(patLabel)}</td>
+            <td>${escapeHtml(nameByIdForPrint[a.intern_id] || '?')}</td>
+            <td>${patConfCell}</td><td>${internConfCell}</td>
+          </tr>`;
+        }).join('');
+
+        const body = `
+          <div class="meta">${fmtBr(weekStartStr)} a ${fmtBr(weekEndStr)} · ${agendados.length} atendimento(s) agendado(s)</div>
+          <table><tr><th>Data</th><th>Horário</th><th>Sala</th><th>Paciente</th><th>Estagiário</th><th>Conf. paciente</th><th>Conf. estagiário</th></tr>${rows}</table>`;
+        exportReportPdf('Agendados da semana', body);
+      };
+    }
 
     if (!appts || appts.length === 0) {
       listWrap.innerHTML = `<div class="placeholder">Nenhum atendimento neste período.</div>`;
@@ -4224,6 +4427,15 @@ async function renderAgenda() {
         msgEl.className = 'message error'; msgEl.style.display = 'block';
         return;
       }
+
+      if (newRoomOnly) {
+        const roomConflicts = await checkRoomConflicts(newRoomOnly, [newDate], newStart, newEnd, null, a.id);
+        if (roomConflicts.length > 0) {
+          const proceed = confirm(`Aviso: a sala "${newRoomOnly}" já tem ${roomConflicts.length} atendimento(s) marcado(s) nesse dia/horário (outro paciente/estagiário). Deseja continuar mesmo assim?`);
+          if (!proceed) return;
+        }
+      }
+
       const btn = document.getElementById('saveApptOnlyBtn');
       btn.disabled = true; btn.textContent = 'Salvando...';
       const { error } = await db.from('appointments').update({
@@ -4377,6 +4589,17 @@ async function renderAgenda() {
           msgEl.className = 'message error'; msgEl.style.display = 'block';
           btn.disabled = false; btn.textContent = 'Salvar série completa';
           return;
+        }
+
+        if (newRoom) {
+          const roomConflicts = await checkRoomConflicts(newRoom, newDates, newStart, newEnd, series.id);
+          if (roomConflicts.length > 0) {
+            const proceed = confirm(`Aviso: a sala "${newRoom}" já tem ${roomConflicts.length} atendimento(s) marcado(s) nesse(s) dia/horário (outro paciente/estagiário). Deseja continuar mesmo assim?`);
+            if (!proceed) {
+              btn.disabled = false; btn.textContent = 'Salvar série completa';
+              return;
+            }
+          }
         }
       }
 
@@ -4671,6 +4894,13 @@ async function renderAgenda() {
       <small>Primeira sessão: ${generatedDates[0].toLocaleDateString('pt-BR')} · Última sessão: ${generatedDates[generatedDates.length-1].toLocaleDateString('pt-BR')}</small>`;
     confirmBtn.disabled = false;
 
+    if (room) {
+      const roomConflicts = await checkRoomConflicts(room, dateStrings, startTime, endTime);
+      if (roomConflicts.length > 0) {
+        previewText.innerHTML += roomConflictWarningHtml(roomConflicts, room);
+      }
+    }
+
     confirmBtn.onclick = async () => {
       confirmBtn.disabled = true; confirmBtn.textContent = 'Criando...';
 
@@ -4699,6 +4929,10 @@ async function renderAgenda() {
         confirmBtn.disabled = false; confirmBtn.textContent = 'Validar e criar atendimentos';
         return;
       }
+
+      // O paciente só pode ser escolhido aqui se estiver "Em contato"; agora que foi
+      // agendado, passa a "Ativo" automaticamente, para a Situação mostrar "Agendado".
+      await db.from('patients').update({ status: 'ativo' }).eq('id', patientId).eq('status', 'em_contato');
 
       if (apptMode === 'estagiario' && room) {
         await syncRoomStaffing(room, weekday, startTime, endTime, internId, nameById);
