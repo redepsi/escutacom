@@ -799,14 +799,21 @@ async function loadInternStatsAndActions() {
       const [{ count: horasRealizadas }, { data: nextAppt }] = await Promise.all([
         db.from('appointments').select('id', { count: 'exact', head: true })
           .eq('intern_id', currentIntern.id).eq('patient_id', pid).eq('attendance_status', 'presente'),
-        db.from('appointments').select('appointment_date, start_time')
+        db.from('appointments').select('appointment_date, start_time, room')
           .eq('intern_id', currentIntern.id).eq('patient_id', pid).eq('status', 'agendado')
           .gte('appointment_date', todayStr).order('appointment_date').order('start_time').limit(1)
       ]);
 
+      const nextApptRow = nextAppt && nextAppt[0] ? nextAppt[0] : null;
+      let roomInfo = null;
+      if (nextApptRow && nextApptRow.room) {
+        const { data: r } = await db.from('rooms').select('name, locations(name, address)').eq('name', nextApptRow.room).maybeSingle();
+        roomInfo = r || null;
+      }
+
       return {
         pid, patLabel, earliestStart, horasRealizadas: horasRealizadas || 0,
-        nextAppt: nextAppt && nextAppt[0] ? nextAppt[0] : null
+        nextAppt: nextApptRow, roomInfo
       };
     }));
 
@@ -814,16 +821,22 @@ async function loadInternStatsAndActions() {
     cardsWrap.style.gridTemplateColumns = `repeat(${Math.min(patientCards.length, 3)}, 1fr)`;
     cardsWrap.style.gap = '14px';
 
-    cardsWrap.innerHTML = patientCards.map(p => `
+    cardsWrap.innerHTML = patientCards.map(p => {
+      const roomLine = p.roomInfo
+        ? `${escapeHtml(p.roomInfo.name)}${p.roomInfo.locations ? ` — ${escapeHtml(p.roomInfo.locations.name)}${p.roomInfo.locations.address ? ' · ' + escapeHtml(p.roomInfo.locations.address) : ''}` : ''}`
+        : (p.nextAppt ? 'Sala não definida' : '—');
+      return `
       <div class="panel" style="margin-bottom:0;padding:20px">
         <div style="font-weight:700;font-size:17px;margin-bottom:4px">${escapeHtml(p.patLabel)}</div>
         <div class="muted" style="font-size:12px;margin-bottom:14px">Vínculo desde ${fmtBr(p.earliestStart)}</div>
-        <div style="display:flex;gap:24px;margin-bottom:14px">
+        <div style="display:flex;gap:24px;margin-bottom:10px">
           <div><div class="muted" style="font-size:11px">Horas realizadas</div><div style="font-weight:700;font-size:18px">${p.horasRealizadas}h</div></div>
           <div><div class="muted" style="font-size:11px">Próxima sessão</div><div style="font-weight:700;font-size:14px">${p.nextAppt ? `${dateWithWeekday(p.nextAppt.appointment_date)} ${p.nextAppt.start_time.slice(0,5)}` : '—'}</div></div>
         </div>
+        <div style="margin-bottom:14px"><div class="muted" style="font-size:11px">Sala</div><div style="font-weight:700;font-size:13px">${roomLine}</div></div>
         <button class="action secondary view-active-patient-ficha" data-id="${p.pid}" style="padding:6px 12px;font-size:12px">Ver ficha</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     cardsWrap.querySelectorAll('.view-active-patient-ficha').forEach(btn => {
       btn.addEventListener('click', () => renderPatientFicha(btn.dataset.id, 'minha_agenda'));
@@ -3251,6 +3264,7 @@ async function renderMapa() {
         <div id="mapaDayLabel" style="font-weight:700;min-width:200px;text-align:center"></div>
         <button id="mapaNextDay" class="action secondary">▶</button>
         <button id="mapaTodayBtn" class="action secondary">Hoje</button>
+        <button id="printEnsalamentoBtn" class="action secondary">🖨️ Imprimir ensalamento do dia</button>
       </div>
       <div id="mapaGridWrap"><div class="placeholder">Carregando...</div></div>
     </section>`;
@@ -3736,6 +3750,17 @@ async function renderMapa() {
     }
 
     gridWrap.innerHTML = html;
+
+    const printBtn = document.getElementById('printEnsalamentoBtn');
+    if (printBtn) {
+      printBtn.onclick = () => {
+        const dayStr = toDateStr(mapaAnchorDate);
+        const dayHtml = rooms.map(room => `
+          <h3 style="margin:20px 0 8px">${escapeHtml(room.name)}</h3>
+          ${buildRoomDaySection(room, dayStr)}`).join('');
+        exportReportPdf(`Ensalamento — ${dateWithWeekday(dayStr)}`, dayHtml);
+      };
+    }
   }
 
   await loadLocations();
