@@ -219,6 +219,37 @@ const nav = document.getElementById('nav');
 const pageTitle = document.getElementById('pageTitle');
 
 // ---------------------------------------------------------------------------
+// FECHAMENTO GENÉRICO DE POP-UPS (clicar fora, ou no X)
+// Funciona em qualquer .modal-overlay existente hoje ou criado no futuro.
+// ---------------------------------------------------------------------------
+document.body.addEventListener('click', (e) => {
+  if (e.target.classList && e.target.classList.contains('modal-overlay')) {
+    e.target.style.display = 'none';
+  }
+});
+
+function injectModalCloseButtons() {
+  document.querySelectorAll('.modal-box').forEach(box => {
+    if (box.querySelector('.modal-x-close')) return;
+    const overlay = box.closest('.modal-overlay');
+    if (!overlay) return;
+    box.style.position = 'relative';
+    const xBtn = document.createElement('button');
+    xBtn.className = 'modal-x-close';
+    xBtn.type = 'button';
+    xBtn.innerHTML = '✕';
+    xBtn.setAttribute('aria-label', 'Fechar');
+    xBtn.style.cssText = 'position:absolute;top:14px;right:16px;border:0;background:none;font-size:18px;line-height:1;cursor:pointer;color:#98a2b3;padding:4px';
+    xBtn.addEventListener('click', () => { overlay.style.display = 'none'; });
+    box.insertBefore(xBtn, box.firstChild);
+  });
+}
+
+new MutationObserver(() => injectModalCloseButtons()).observe(document.body, { childList: true, subtree: true });
+// Cobre os pop-ups que já existem assim que a página carrega (ex.: alterar senha).
+injectModalCloseButtons();
+
+// ---------------------------------------------------------------------------
 // ESTADO GLOBAL
 // ---------------------------------------------------------------------------
 let currentProfile = null;   // linha de profiles
@@ -546,6 +577,27 @@ function render() {
 // ---------------------------------------------------------------------------
 // PÁGINA: INÍCIO (coordenação e estagiário)
 // ---------------------------------------------------------------------------
+// Calcula os horários "efetivamente abertos", olhando todas as salas juntas
+// (ou só as salas das localizações informadas, se locationIds for passado).
+// Substitui o antigo quadro geral da clínica como fonte de verdade.
+async function getEffectiveClinicSlots(locationIds = null) {
+  let rows;
+  if (locationIds && locationIds.length > 0) {
+    const { data } = await db.from('room_schedule_slots').select('weekday, start_time, end_time, enabled, rooms(location_id)');
+    rows = (data || []).filter(s => s.rooms && locationIds.includes(s.rooms.location_id));
+  } else {
+    const { data } = await db.from('room_schedule_slots').select('weekday, start_time, end_time, enabled');
+    rows = data || [];
+  }
+  const map = {};
+  rows.forEach(s => {
+    const key = `${s.weekday}_${s.start_time.slice(0, 5)}`;
+    if (!map[key]) map[key] = { weekday: s.weekday, start_time: s.start_time, end_time: s.end_time, enabled: false };
+    if (s.enabled) map[key].enabled = true;
+  });
+  return Object.values(map);
+}
+
 function formatHM(t) {
   const [h, m] = t.slice(0, 5).split(':');
   return m === '00' ? `${h}h` : `${h}h${m}`;
@@ -558,6 +610,34 @@ function toMinutes(t) {
 
 function timesOverlap(startA, endA, startB, endB) {
   return toMinutes(startA) < toMinutes(endB) && toMinutes(startB) < toMinutes(endA);
+}
+
+// Mantém o ensalamento em dia com o agendamento: se um agendamento define uma
+// sala, garante que aquele estagiário fique ensalado ali (perguntando antes
+// de sobrescrever, se já houver outro estagiário ensalado no mesmo horário).
+async function syncRoomStaffing(roomName, weekday, startTime, endTime, internId, nameByIdMap) {
+  if (!roomName) return;
+  const { data: roomRow } = await db.from('rooms').select('id').eq('name', roomName).maybeSingle();
+  if (!roomRow) return;
+
+  const { data: existingSlot } = await db.from('room_schedule_slots')
+    .select('id').eq('room_id', roomRow.id).eq('weekday', weekday).eq('start_time', startTime).maybeSingle();
+  if (!existingSlot) {
+    await db.from('room_schedule_slots').insert([{ room_id: roomRow.id, weekday, start_time: startTime, end_time: endTime, enabled: true }]);
+  }
+
+  const { data: existingStaffing } = await db.from('room_staffing')
+    .select('*').eq('room_id', roomRow.id).eq('weekday', weekday).eq('start_time', startTime).maybeSingle();
+
+  if (!existingStaffing) {
+    await db.from('room_staffing').insert([{ room_id: roomRow.id, intern_id: internId, weekday, start_time: startTime, end_time: endTime }]);
+  } else if (existingStaffing.intern_id !== internId) {
+    const internName = (nameByIdMap && nameByIdMap[internId]) || 'este estagiário';
+    const oldName = (nameByIdMap && nameByIdMap[existingStaffing.intern_id]) || 'outro estagiário';
+    if (confirm(`A sala "${roomName}" já tem ${oldName} ensalado neste dia e horário. Deseja substituir por ${internName}?`)) {
+      await db.from('room_staffing').update({ intern_id: internId }).eq('id', existingStaffing.id);
+    }
+  }
 }
 
 function dateWithWeekday(dateStr) {
@@ -822,7 +902,9 @@ async function runBackup() {
     'patients', 'interns', 'profiles', 'clinic_schedule_slots',
     'intern_availability', 'patient_availability',
     'appointment_series', 'appointments',
-    'academic_periods', 'intern_supervisor_history'
+    'academic_periods', 'intern_supervisor_history',
+    'locations', 'rooms', 'room_schedule_slots', 'room_staffing',
+    'intern_location_preferences', 'patient_number_counters'
   ];
 
   try {
@@ -849,17 +931,16 @@ async function runBackup() {
 }
 
 // ---------------------------------------------------------------------------
-// PÁGINA: CONFIGURAÇÕES (Quadro de horários da clínica)
+// PÁGINA: CONFIGURAÇÕES (resumo somente leitura dos horários, por sala)
 // ---------------------------------------------------------------------------
 async function renderConfiguracoes() {
   content.innerHTML = `
     <section class="panel">
       <div class="toolbar">
         <div>
-          <h2>Quadro de horários da clínica</h2>
-          <div class="muted">Clique em um horário para alternar entre Liberado e Fechado.</div>
+          <h2>Horários</h2>
+          <div class="muted">Isto é só um resumo. Os horários agora são gerenciados por sala, em <strong>Mapa de Salas</strong>. Cada célula mostra em quais salas aquele horário está aberto.</div>
         </div>
-        <button id="saveScheduleBtn" class="action">Salvar quadro</button>
       </div>
       <div id="scheduleMsg" class="message"></div>
       <div id="scheduleGrid" class="schedule-grid">
@@ -881,73 +962,37 @@ async function renderConfiguracoes() {
   document.getElementById('backupBtn').addEventListener('click', runBackup);
 
   const grid = document.getElementById('scheduleGrid');
-  const msg = document.getElementById('scheduleMsg');
 
-  const { data: slots, error } = await db
-    .from('clinic_schedule_slots').select('*').order('start_time');
+  const [{ data: roomSlots }, { data: rooms }] = await Promise.all([
+    db.from('room_schedule_slots').select('weekday, start_time, end_time, enabled, room_id').eq('enabled', true),
+    db.from('rooms').select('id, name')
+  ]);
 
-  if (error) {
-    grid.innerHTML = `<div style="grid-column:1/-1;padding:20px;color:#b42318">Erro ao carregar: ${escapeHtml(error.message)}</div>`;
+  const roomNameById = {};
+  (rooms || []).forEach(r => { roomNameById[r.id] = r.name; });
+
+  if (!roomSlots || roomSlots.length === 0) {
+    grid.innerHTML = `<div style="grid-column:1/-1;padding:20px;text-align:center" class="placeholder">Nenhum horário aberto em nenhuma sala ainda. Configure em "Mapa de Salas".</div>`;
     return;
   }
 
-  const times = [...new Set(slots.map(s => s.start_time.slice(0, 5)))].sort();
+  const times = [...new Set(roomSlots.map(s => s.start_time.slice(0, 5)))].sort();
 
   let html = `<div class="schedule-head">Horário</div>` + WEEKDAYS.map(d => `<div class="schedule-head">${d.l}</div>`).join('');
 
   times.forEach(time => {
-    const sampleSlot = slots.find(s => s.start_time.slice(0, 5) === time);
-    const label = sampleSlot ? `${formatHM(sampleSlot.start_time)} – ${formatHM(sampleSlot.end_time)}` : time;
+    const sample = roomSlots.find(s => s.start_time.slice(0, 5) === time);
+    const label = sample ? `${formatHM(sample.start_time)} – ${formatHM(sample.end_time)}` : time;
     html += `<div><strong>${label}</strong></div>`;
     WEEKDAYS.forEach(d => {
-      const slot = slots.find(s => s.weekday === d.n && s.start_time.slice(0, 5) === time);
-      if (!slot) { html += `<div></div>`; return; }
-      const cls = slot.enabled ? 'slot-open' : 'slot-closed';
-      const label2 = slot.enabled ? '🟢 Liberado' : '⚪ Fechado';
-      html += `<div><button type="button" class="slot-btn ${cls}"
-        data-id="${slot.id}" data-weekday="${slot.weekday}"
-        data-start="${slot.start_time}" data-end="${slot.end_time}">${label2}</button></div>`;
+      const matches = roomSlots.filter(s => s.weekday === d.n && s.start_time.slice(0, 5) === time);
+      if (matches.length === 0) { html += `<div style="color:#d0d5dd;font-size:11px">Fechado</div>`; return; }
+      const roomNames = matches.map(s => escapeHtml(roomNameById[s.room_id] || '?')).join(', ');
+      html += `<div style="background:#e9f7ef;color:#176b36;border:1px solid #bce3cc;border-radius:8px;padding:6px;font-size:11px">🟢 ${roomNames}</div>`;
     });
   });
 
   grid.innerHTML = html;
-
-  grid.querySelectorAll('.slot-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const open = btn.classList.contains('slot-open');
-      btn.classList.toggle('slot-open', !open);
-      btn.classList.toggle('slot-closed', open);
-      btn.textContent = open ? '⚪ Fechado' : '🟢 Liberado';
-    });
-  });
-
-  document.getElementById('saveScheduleBtn').addEventListener('click', async () => {
-    const btn = document.getElementById('saveScheduleBtn');
-    btn.disabled = true;
-    btn.textContent = 'Salvando...';
-    msg.style.display = 'none';
-
-    const updates = Array.from(grid.querySelectorAll('.slot-btn')).map(b => ({
-      id: b.dataset.id,
-      weekday: parseInt(b.dataset.weekday),
-      start_time: b.dataset.start,
-      end_time: b.dataset.end,
-      enabled: b.classList.contains('slot-open')
-    }));
-
-    const { error: saveError } = await db.from('clinic_schedule_slots').upsert(updates);
-
-    if (saveError) {
-      msg.textContent = 'Erro ao salvar: ' + saveError.message;
-      msg.className = 'message error';
-    } else {
-      msg.textContent = 'Quadro de horários atualizado com sucesso.';
-      msg.className = 'message success';
-    }
-    msg.style.display = 'block';
-    btn.disabled = false;
-    btn.textContent = 'Salvar quadro';
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1055,6 +1100,7 @@ async function renderRelatorios() {
       <div style="display:flex;gap:6px;margin-bottom:18px">
         <button class="action secondary report-tab" data-v="individual">Individual</button>
         <button class="action secondary report-tab" data-v="geral">Geral</button>
+        <button class="action secondary report-tab" data-v="origem">Por origem/status</button>
       </div>
       <div id="reportFormWrap"></div>
       <div id="reportResultWrap" style="margin-top:20px"></div>
@@ -1089,16 +1135,24 @@ async function renderRelatorios() {
           <div class="field" style="margin-bottom:0"><label>Até</label><input type="date" id="repEnd" value="${d.end}"></div>
           <button id="genReportBtn" class="action">Gerar relatório</button>
         </div>`;
-    } else {
+    } else if (reportView === 'geral') {
       formWrap.innerHTML = `
         <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
           <div class="field" style="margin-bottom:0"><label>De</label><input type="date" id="repStart" value="${d.start}"></div>
           <div class="field" style="margin-bottom:0"><label>Até</label><input type="date" id="repEnd" value="${d.end}"></div>
           <button id="genReportBtn" class="action">Gerar relatório</button>
         </div>`;
+    } else {
+      formWrap.innerHTML = `
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+          <div class="field" style="margin-bottom:0"><label>Cadastrados de</label><input type="date" id="repStart" value="${d.start}"></div>
+          <div class="field" style="margin-bottom:0"><label>Até</label><input type="date" id="repEnd" value="${d.end}"></div>
+          <button id="genReportBtn" class="action">Gerar relatório</button>
+        </div>`;
     }
 
-    document.getElementById('genReportBtn').addEventListener('click', reportView === 'individual' ? generateIndividual : generateGeral);
+    document.getElementById('genReportBtn').addEventListener('click',
+      reportView === 'individual' ? generateIndividual : reportView === 'geral' ? generateGeral : generateOrigemStatus);
     document.getElementById('reportResultWrap').innerHTML = '';
   }
 
@@ -1215,6 +1269,76 @@ function formatSupervisorPeriods(list) {
     });
   }
 
+  async function generateOrigemStatus() {
+    const start = document.getElementById('repStart').value;
+    const end = document.getElementById('repEnd').value;
+    const resultWrap = document.getElementById('reportResultWrap');
+    if (!start || !end || start > end) { resultWrap.innerHTML = `<div class="message error" style="display:block">Verifique o período.</div>`; return; }
+
+    resultWrap.innerHTML = `<div class="placeholder">Gerando...</div>`;
+
+    const endExclusive = toDateStr(new Date(new Date(end + 'T00:00:00').getTime() + 86400000));
+    const { data: patients, error } = await db.from('patients').select('status, origin')
+      .gte('created_at', start + 'T00:00:00').lt('created_at', endExclusive + 'T00:00:00');
+
+    if (error) { resultWrap.innerHTML = `<div class="message error" style="display:block">Erro: ${escapeHtml(error.message)}</div>`; return; }
+
+    const STATUS_LABELS = {
+      ativo: 'Ativo', inativo: 'Inativo', pausado: 'Pausado', alta: 'Alta',
+      em_contato: 'Em contato', sem_encaixe: 'Sem encaixe'
+    };
+
+    const byStatus = {};
+    const byOrigin = {};
+    (patients || []).forEach(p => {
+      const statusLabel = STATUS_LABELS[p.status] || p.status;
+      byStatus[statusLabel] = (byStatus[statusLabel] || 0) + 1;
+      const originLabel = (p.origin || '').trim() || 'Não informado';
+      byOrigin[originLabel] = (byOrigin[originLabel] || 0) + 1;
+    });
+
+    const total = (patients || []).length;
+
+    function buildRows(map) {
+      return Object.entries(map).sort((a, b) => b[1] - a[1])
+        .map(([label, count]) => `<tr><td style="text-align:left">${escapeHtml(label)}</td><td>${count}</td></tr>`).join('');
+    }
+
+    const statusRows = buildRows(byStatus);
+    const originRows = buildRows(byOrigin);
+
+    const bodyHtml = `
+      <div class="muted" style="margin-bottom:14px">Pacientes cadastrados no período: <strong>${total}</strong></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div>
+          <h3 style="margin-top:0">Por status</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <tr style="text-align:left;font-size:12px;color:#667085"><th style="text-align:left">Status</th><th>Qtd.</th></tr>
+            ${statusRows || '<tr><td colspan="2" class="muted">Nenhum registro</td></tr>'}
+          </table>
+        </div>
+        <div>
+          <h3 style="margin-top:0">Por origem</h3>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <tr style="text-align:left;font-size:12px;color:#667085"><th style="text-align:left">Origem</th><th>Qtd.</th></tr>
+            ${originRows || '<tr><td colspan="2" class="muted">Nenhum registro</td></tr>'}
+          </table>
+        </div>
+      </div>`;
+
+    resultWrap.innerHTML = `<div style="margin-bottom:12px"><button id="exportPdfBtn" class="action">Exportar PDF</button></div>${bodyHtml}`;
+
+    document.getElementById('exportPdfBtn').addEventListener('click', () => {
+      const pdfBody = `
+        <div class="meta">${fmtBr(start)} a ${fmtBr(end)} · ${total} paciente(s) cadastrados</div>
+        <h3>Por status</h3>
+        <table><tr><th>Status</th><th>Quantidade</th></tr>${statusRows}</table>
+        <h3>Por origem</h3>
+        <table><tr><th>Origem</th><th>Quantidade</th></tr>${originRows}</table>`;
+      exportReportPdf('Relatório por origem e status', pdfBody);
+    });
+  }
+
   renderForm();
 }
 
@@ -1275,7 +1399,13 @@ async function renderEstagiarios() {
     <section class="panel">
       <div class="toolbar">
         <div><h2>Estagiários</h2><div class="muted">Cadastro e login dos estagiários.</div></div>
-        <button id="newInternBtn" class="action">+ Novo estagiário</button>
+        <div style="display:flex;gap:8px">
+          <button id="exportInternsPdfBtn" class="action secondary">Lista em PDF</button>
+          <button id="newInternBtn" class="action">+ Novo estagiário</button>
+        </div>
+      </div>
+      <div style="margin-bottom:14px">
+        <input id="internSearchInput" type="text" placeholder="Buscar por nome, matrícula, e-mail ou WhatsApp..." style="width:100%;max-width:420px;padding:10px 14px;border:1px solid #d5dbe4;border-radius:9px;font-size:14px">
       </div>
       <div id="internListWrap"><div class="placeholder">Carregando...</div></div>
     </section>
@@ -1374,6 +1504,8 @@ async function renderEstagiarios() {
   let internsCache = [];
   let internPage = 1;
   let internPageSize = 20;
+  let internSearchQuery = '';
+  let lastFilteredInterns = []; // usado para exportar em PDF
 
   async function loadList() {
     const { data: interns, error: internsErr } = await db.from('interns').select('*');
@@ -1403,11 +1535,28 @@ async function renderEstagiarios() {
       return;
     }
 
-    const effectivePageSize = internPageSize === 'all' ? internsCache.length : internPageSize;
-    const totalPages = Math.max(1, Math.ceil(internsCache.length / effectivePageSize));
+    const filteredInterns = internSearchQuery
+      ? internsCache.filter(i => {
+          const q = internSearchQuery.toLowerCase();
+          return (i.full_name || '').toLowerCase().includes(q)
+            || (i.registration_number || '').toLowerCase().includes(q)
+            || (i.email || '').toLowerCase().includes(q)
+            || (i.whatsapp || '').toLowerCase().includes(q);
+        })
+      : internsCache;
+
+    if (filteredInterns.length === 0) {
+      wrap.innerHTML = `<div class="placeholder">Nenhum estagiário encontrado.</div>`;
+      return;
+    }
+
+    lastFilteredInterns = filteredInterns;
+
+    const effectivePageSize = internPageSize === 'all' ? filteredInterns.length : internPageSize;
+    const totalPages = Math.max(1, Math.ceil(filteredInterns.length / effectivePageSize));
     if (internPage > totalPages) internPage = totalPages;
     const startIdx = (internPage - 1) * effectivePageSize;
-    const pageItems = internPageSize === 'all' ? internsCache : internsCache.slice(startIdx, startIdx + effectivePageSize);
+    const pageItems = internPageSize === 'all' ? filteredInterns : filteredInterns.slice(startIdx, startIdx + effectivePageSize);
 
     const rows = pageItems.map(i => {
       const wa = whatsappLink(i.whatsapp);
@@ -1446,7 +1595,7 @@ async function renderEstagiarios() {
             <option value="100" ${internPageSize === 100 ? 'selected' : ''}>100</option>
             <option value="all" ${internPageSize === 'all' ? 'selected' : ''}>Todos</option>
           </select>
-          <span class="muted">${internsCache.length} estagiário(s)</span>
+          <span class="muted">${filteredInterns.length} estagiário(s)</span>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <button id="internPrevPage" class="action secondary" style="padding:6px 12px" ${internPage <= 1 ? 'disabled' : ''}>◀</button>
@@ -1550,6 +1699,30 @@ async function renderEstagiarios() {
   }
 
   document.getElementById('newInternBtn').addEventListener('click', () => openForm(null));
+
+  document.getElementById('exportInternsPdfBtn').addEventListener('click', () => {
+    const rows = lastFilteredInterns.map(i => `
+      <tr>
+        <td>${escapeHtml(i.full_name)}</td>
+        <td>${escapeHtml(i.registration_number)}</td>
+        <td>${i.current_semester}º</td>
+        <td>${escapeHtml(i.supervisor || '—')}</td>
+      </tr>`).join('');
+    const body = `
+      <div class="meta">${lastFilteredInterns.length} estagiário(s) · gerado em ${new Date().toLocaleDateString('pt-BR')}</div>
+      <table><tr><th>Nome</th><th>Matrícula</th><th>Período</th><th>Supervisor</th></tr>${rows}</table>`;
+    exportReportPdf('Lista de estagiários', body);
+  });
+
+  let internSearchDebounce = null;
+  document.getElementById('internSearchInput').addEventListener('input', (e) => {
+    clearTimeout(internSearchDebounce);
+    internSearchDebounce = setTimeout(() => {
+      internSearchQuery = e.target.value.trim();
+      internPage = 1;
+      loadList();
+    }, 300);
+  });
   document.getElementById('cancelInternBtn').addEventListener('click', () => { panel.style.display = 'none'; });
 
   document.getElementById('sendResetPasswordBtn').addEventListener('click', async () => {
@@ -1773,10 +1946,15 @@ async function renderPacientes() {
     <section class="panel">
       <div class="toolbar">
         <div><h2>Pacientes</h2><div class="muted">Cadastro, disponibilidade e situação dos pacientes.</div></div>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button id="importPatientsBtn" class="action secondary">Importar planilha</button>
+          <button id="exportPatientsPdfBtn" class="action secondary">Lista em PDF</button>
+          <button id="exportPatientsWithInternPdfBtn" class="action secondary">Lista com estagiário (PDF)</button>
           <button id="newPatientBtn" class="action">+ Novo paciente</button>
         </div>
+      </div>
+      <div style="margin-bottom:14px">
+        <input id="patientSearchInput" type="text" placeholder="Buscar por nome, inscrição, WhatsApp ou origem..." style="width:100%;max-width:420px;padding:10px 14px;border:1px solid #d5dbe4;border-radius:9px;font-size:14px">
       </div>
       <div style="display:flex;gap:6px;margin-bottom:14px">
         <button class="action secondary situation-filter" data-v="ativos">Ativos</button>
@@ -1858,12 +2036,15 @@ async function renderPacientes() {
   let clinicSlotsCache = [];
   let futureAvailEntries = [];
 
-  const { data: clinicSlots } = await db.from('clinic_schedule_slots').select('*');
+  const clinicSlots = await getEffectiveClinicSlots();
   clinicSlotsCache = clinicSlots || [];
 
   let situationFilter = 'ativos';
   let patientPage = 1;
   let patientPageSize = 20;
+  let patientSearchQuery = '';
+  let lastFilteredPatients = []; // usado para exportar em PDF (lista inteira, sem paginação)
+  let lastPatientInternByPatientId = {};
 
   async function loadList() {
     const { data, error } = await db.from('patients').select('*').order('registration_number', { ascending: true });
@@ -1881,7 +2062,7 @@ async function renderPacientes() {
     const patientIds = patientsCache.map(p => p.id);
     const [{ data: allAvail }, { data: activeSeries }] = await Promise.all([
       db.from('patient_availability').select('patient_id, weekday, start_time'),
-      db.from('appointment_series').select('patient_id').in('patient_id', patientIds).eq('status', 'ativa')
+      db.from('appointment_series').select('patient_id, intern_id').in('patient_id', patientIds).eq('status', 'ativa')
     ]);
 
     const availByPatient = {};
@@ -1891,6 +2072,15 @@ async function renderPacientes() {
     });
 
     const scheduledSet = new Set((activeSeries || []).map(s => s.patient_id));
+
+    const internIdsForExport = [...new Set((activeSeries || []).map(s => s.intern_id))];
+    const { data: internProfilesForExport } = internIdsForExport.length
+      ? await db.from('profiles').select('id, full_name').in('id', internIdsForExport)
+      : { data: [] };
+    const internNameByIdForExport = {};
+    (internProfilesForExport || []).forEach(p => { internNameByIdForExport[p.id] = p.full_name; });
+    lastPatientInternByPatientId = {};
+    (activeSeries || []).forEach(s => { lastPatientInternByPatientId[s.patient_id] = internNameByIdForExport[s.intern_id] || '?'; });
 
     const filtered = patientsCache.filter(p => {
       if (situationFilter === 'inativos') return p.status === 'inativo';
@@ -1902,7 +2092,16 @@ async function renderPacientes() {
       if (situationFilter === 'agendado') return scheduledSet.has(p.id);
       if (situationFilter === 'espera') return !scheduledSet.has(p.id);
       return true; // ativos
+    }).filter(p => {
+      if (!patientSearchQuery) return true;
+      const q = patientSearchQuery.toLowerCase();
+      return (p.full_name || '').toLowerCase().includes(q)
+        || (p.registration_number || '').toLowerCase().includes(q)
+        || (p.whatsapp || '').toLowerCase().includes(q)
+        || (p.origin || '').toLowerCase().includes(q);
     });
+
+    lastFilteredPatients = filtered;
 
     if (filtered.length === 0) {
       wrap.innerHTML = `<div class="placeholder">Nenhum paciente nesta situação.</div>`;
@@ -2030,6 +2229,16 @@ async function renderPacientes() {
     });
   });
 
+  let patientSearchDebounce = null;
+  document.getElementById('patientSearchInput').addEventListener('input', (e) => {
+    clearTimeout(patientSearchDebounce);
+    patientSearchDebounce = setTimeout(() => {
+      patientSearchQuery = e.target.value.trim();
+      patientPage = 1;
+      loadList();
+    }, 300);
+  });
+
   function resetForm() {
     editingId = null;
     originalStatus = null;
@@ -2125,6 +2334,25 @@ async function renderPacientes() {
 
   document.getElementById('newPatientBtn').addEventListener('click', () => openForm(null));
   document.getElementById('cancelPatientBtn').addEventListener('click', () => { panel.style.display = 'none'; });
+
+  // ---- Exportar listas em PDF ----
+  document.getElementById('exportPatientsPdfBtn').addEventListener('click', () => {
+    const rows = lastFilteredPatients.map(p => `
+      <tr><td>${escapeHtml(p.registration_number)}</td><td>${escapeHtml(p.full_name || '—')}</td></tr>`).join('');
+    const body = `
+      <div class="meta">${lastFilteredPatients.length} paciente(s) · gerado em ${new Date().toLocaleDateString('pt-BR')}</div>
+      <table><tr><th>Nº de inscrição</th><th>Nome</th></tr>${rows}</table>`;
+    exportReportPdf('Lista de pacientes', body);
+  });
+
+  document.getElementById('exportPatientsWithInternPdfBtn').addEventListener('click', () => {
+    const rows = lastFilteredPatients.map(p => `
+      <tr><td>${escapeHtml(p.registration_number)}</td><td>${escapeHtml(p.full_name || '—')}</td><td>${escapeHtml(lastPatientInternByPatientId[p.id] || '—')}</td></tr>`).join('');
+    const body = `
+      <div class="meta">${lastFilteredPatients.length} paciente(s) · gerado em ${new Date().toLocaleDateString('pt-BR')}</div>
+      <table><tr><th>Nº de inscrição</th><th>Nome</th><th>Estagiário</th></tr>${rows}</table>`;
+    exportReportPdf('Lista de pacientes com estagiário', body);
+  });
 
   // ---- Importar planilha de pacientes ----
   const importPanel = document.getElementById('importPanel');
@@ -2614,7 +2842,16 @@ async function renderMinhaDisponibilidade() {
   content.innerHTML = `
     <section class="panel">
       <div class="toolbar">
-        <div><h2>Minha disponibilidade</h2><div class="muted">Marque os horários em que você pode atender. Só aparecem os horários liberados pela clínica.</div></div>
+        <div><h2>Endereços onde topo atender</h2><div class="muted">Comece por aqui: marque só os endereços que funcionam pra você — se não marcar nenhum, você é considerado disposto a atender em qualquer um, e a grade abaixo mostra os horários de todos. A sala específica é escolhida pela coordenação.</div></div>
+        <button id="saveLocationPrefBtn" class="action">Salvar</button>
+      </div>
+      <div id="locationPrefMsg" class="message"></div>
+      <div id="locationPrefWrap"><div class="placeholder">Carregando endereços...</div></div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <div><h2>Minha disponibilidade</h2><div class="muted" id="availGridHint">Marque os horários em que você pode atender. Só aparecem os horários liberados em pelo menos uma sala.</div></div>
         <button id="saveAvailBtn" class="action">Salvar disponibilidade</button>
       </div>
       <div id="availMsg" class="message"></div>
@@ -2623,11 +2860,25 @@ async function renderMinhaDisponibilidade() {
 
   const gridEl = document.getElementById('myAvailGrid');
   const msg = document.getElementById('availMsg');
+  const availGridHint = document.getElementById('availGridHint');
 
-  const [{ data: clinicSlots }, { data: mySlots }] = await Promise.all([
-    db.from('clinic_schedule_slots').select('*').eq('enabled', true),
+  // ---- Endereços onde topo atender (buscado primeiro, para filtrar a grade) ----
+  const locationPrefWrap = document.getElementById('locationPrefWrap');
+  const locationPrefMsg = document.getElementById('locationPrefMsg');
+
+  const [{ data: locations }, { data: myPrefs }, { data: mySlots }] = await Promise.all([
+    db.from('locations').select('*').order('name'),
+    db.from('intern_location_preferences').select('location_id').eq('intern_id', currentIntern.id),
     db.from('intern_availability').select('*').eq('intern_id', currentIntern.id)
   ]);
+
+  const myPrefIds = (myPrefs || []).map(p => p.location_id);
+  const clinicSlots = await getEffectiveClinicSlots(myPrefIds.length > 0 ? myPrefIds : null);
+
+  if (myPrefIds.length > 0) {
+    const prefNames = locations.filter(l => myPrefIds.includes(l.id)).map(l => l.name).join(', ');
+    availGridHint.textContent = `Marque os horários em que você pode atender. Mostrando só os horários de: ${prefNames}.`;
+  }
 
   gridEl.innerHTML = buildAvailabilityGrid(clinicSlots || [], mySlots || []);
   bindAvailabilityToggles(gridEl);
@@ -2661,6 +2912,52 @@ async function renderMinhaDisponibilidade() {
     msg.className = 'message success'; msg.style.display = 'block';
     btn.disabled = false; btn.textContent = 'Salvar disponibilidade';
   });
+
+  if (!locations || locations.length === 0) {
+    locationPrefWrap.innerHTML = `<div class="placeholder">Nenhum endereço cadastrado ainda.</div>`;
+  } else {
+    const myPrefSet = new Set(myPrefIds);
+    locationPrefWrap.innerHTML = locations.map(l => `
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e5e9ef;border-radius:8px;margin-bottom:8px;cursor:pointer">
+        <input type="checkbox" class="location-pref-check" data-id="${l.id}" ${myPrefSet.has(l.id) ? 'checked' : ''}>
+        <div>
+          <strong>${escapeHtml(l.name)}</strong>
+          ${l.address ? `<div class="muted" style="font-size:12px">${escapeHtml(l.address)}</div>` : ''}
+        </div>
+      </label>`).join('');
+  }
+
+  const saveLocationPrefBtn = document.getElementById('saveLocationPrefBtn');
+  if (saveLocationPrefBtn) {
+    saveLocationPrefBtn.addEventListener('click', async () => {
+      saveLocationPrefBtn.disabled = true; saveLocationPrefBtn.textContent = 'Salvando...';
+      locationPrefMsg.style.display = 'none';
+
+      const checkedIds = Array.from(document.querySelectorAll('.location-pref-check:checked')).map(c => c.dataset.id);
+
+      const { error: delErr } = await db.from('intern_location_preferences').delete().eq('intern_id', currentIntern.id);
+      if (delErr) {
+        locationPrefMsg.textContent = 'Erro ao salvar: ' + delErr.message;
+        locationPrefMsg.className = 'message error'; locationPrefMsg.style.display = 'block';
+        saveLocationPrefBtn.disabled = false; saveLocationPrefBtn.textContent = 'Salvar';
+        return;
+      }
+
+      if (checkedIds.length > 0) {
+        const { error: insErr } = await db.from('intern_location_preferences')
+          .insert(checkedIds.map(locationId => ({ intern_id: currentIntern.id, location_id: locationId })));
+        if (insErr) {
+          locationPrefMsg.textContent = 'Erro ao salvar: ' + insErr.message;
+          locationPrefMsg.className = 'message error'; locationPrefMsg.style.display = 'block';
+          saveLocationPrefBtn.disabled = false; saveLocationPrefBtn.textContent = 'Salvar';
+          return;
+        }
+      }
+
+      // Recarrega a página inteira para a grade já refletir o novo filtro de endereço.
+      await renderMinhaDisponibilidade();
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2682,13 +2979,14 @@ async function renderGradeGeral() {
   const filterWrap = document.getElementById('internFilterWrap');
   const gridWrap = document.getElementById('gradeGeralWrap');
 
-  const [{ data: clinicSlots }, { data: interns }] = await Promise.all([
-    db.from('clinic_schedule_slots').select('*').eq('enabled', true),
+  const [clinicSlotsAll, { data: interns }] = await Promise.all([
+    getEffectiveClinicSlots(),
     db.from('interns').select('*').eq('status', 'ativo')
   ]);
+  const clinicSlots = clinicSlotsAll.filter(s => s.enabled);
 
   if (!clinicSlots || clinicSlots.length === 0) {
-    gridWrap.innerHTML = `<div class="placeholder">Nenhum horário liberado pela clínica. Configure em "Horários".</div>`;
+    gridWrap.innerHTML = `<div class="placeholder">Nenhum horário liberado em nenhuma sala ainda. Configure em "Mapa de Salas".</div>`;
     return;
   }
   if (!interns || interns.length === 0) {
@@ -2916,11 +3214,24 @@ async function renderMapa() {
   content.innerHTML = `
     <section class="panel">
       <div class="toolbar">
+        <div><h2>Localizações</h2><div class="muted">Os endereços onde a clínica atende. Cada sala pertence a uma localização.</div></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
+        <div class="field" style="margin-bottom:0"><label>Nome da localização</label><input id="newLocationName" placeholder="Ex.: Sede, Anexo"></div>
+        <div class="field" style="margin-bottom:0"><label>Endereço</label><input id="newLocationAddress" placeholder="Ex.: Rua X, 123"></div>
+        <button id="addLocationBtn" class="action">+ Adicionar localização</button>
+      </div>
+      <div id="locationsMsg" class="message"></div>
+      <div id="locationsListWrap"><div class="placeholder">Carregando...</div></div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
         <div><h2>Salas de atendimento</h2><div class="muted">Cada sala tem seu próprio horário e os estagiários ensalados nela.</div></div>
       </div>
       <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
         <div class="field" style="margin-bottom:0"><label>Nome da sala</label><input id="newRoomName" placeholder="Ex.: Sala 3"></div>
-        <div class="field" style="margin-bottom:0"><label>Endereço (opcional)</label><input id="newRoomAddress" placeholder="Ex.: Rua X, 123"></div>
+        <div class="field" style="margin-bottom:0"><label>Localização</label><select id="newRoomLocation"><option value="">Selecione...</option></select></div>
         <button id="addRoomBtn" class="action">+ Adicionar sala</button>
       </div>
       <div id="roomsMsg" class="message"></div>
@@ -2945,6 +3256,54 @@ async function renderMapa() {
     </section>`;
 
   const roomsMsg = document.getElementById('roomsMsg');
+  const locationsMsg = document.getElementById('locationsMsg');
+  let locationsCache = [];
+
+  // ---- Localizações ----
+  async function loadLocations() {
+    const { data: locations, error } = await db.from('locations').select('*').order('name');
+    const wrap = document.getElementById('locationsListWrap');
+    if (error) { wrap.innerHTML = `<div class="message error" style="display:block">Erro: ${escapeHtml(error.message)}</div>`; return; }
+    locationsCache = locations || [];
+
+    document.getElementById('newRoomLocation').innerHTML = '<option value="">Selecione...</option>' +
+      locationsCache.map(l => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
+
+    if (locationsCache.length === 0) {
+      wrap.innerHTML = `<div class="placeholder">Nenhuma localização cadastrada ainda.</div>`;
+      return;
+    }
+    wrap.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px">` + locationsCache.map(l => `
+      <div style="display:flex;align-items:center;gap:8px;background:#f8fafc;border:1px solid #e5e9ef;padding:8px 12px;border-radius:999px">
+        <div><strong style="font-size:13px">${escapeHtml(l.name)}</strong>${l.address ? `<div class="muted" style="font-size:11px">${escapeHtml(l.address)}</div>` : ''}</div>
+        <button class="delete-location" data-id="${l.id}" style="border:0;background:none;color:#b42318;cursor:pointer;font-size:13px">✕</button>
+      </div>`).join('') + `</div>`;
+
+    wrap.querySelectorAll('.delete-location').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Excluir esta localização? Salas vinculadas a ela ficam sem localização definida, mas continuam existindo.')) return;
+        const { error: delError } = await db.from('locations').delete().eq('id', btn.dataset.id);
+        if (delError) alert('Erro ao excluir: ' + delError.message); else { await loadLocations(); await loadRooms(); }
+      });
+    });
+  }
+
+  document.getElementById('addLocationBtn').addEventListener('click', async () => {
+    const nameInput = document.getElementById('newLocationName');
+    const addressInput = document.getElementById('newLocationAddress');
+    const name = nameInput.value.trim();
+    const address = addressInput.value.trim() || null;
+    locationsMsg.style.display = 'none';
+    if (!name) return;
+    const { error } = await db.from('locations').insert([{ name, address }]);
+    if (error) {
+      locationsMsg.textContent = 'Erro ao adicionar: ' + error.message;
+      locationsMsg.className = 'message error'; locationsMsg.style.display = 'block';
+      return;
+    }
+    nameInput.value = ''; addressInput.value = '';
+    await loadLocations();
+  });
 
   async function seedRoomSlots(roomId) {
     const rows = [];
@@ -2970,12 +3329,17 @@ async function renderMapa() {
       return [];
     }
 
-    wrap.innerHTML = rooms.map(r => `
+    const locationOptions = (loc) => '<option value="">Sem localização</option>' +
+      locationsCache.map(l => `<option value="${l.id}" ${loc === l.id ? 'selected' : ''}>${escapeHtml(l.name)}</option>`).join('');
+
+    wrap.innerHTML = rooms.map(r => {
+      const loc = locationsCache.find(l => l.id === r.location_id);
+      return `
       <div class="panel" style="margin-bottom:10px;padding:14px">
         <div id="roomView-${r.id}" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
           <div>
             <strong>${escapeHtml(r.name)}</strong>
-            <div class="muted" style="font-size:12px">${escapeHtml(r.address || 'Sem endereço cadastrado')}</div>
+            <div class="muted" style="font-size:12px">${loc ? escapeHtml(loc.name) + (loc.address ? ' — ' + escapeHtml(loc.address) : '') : 'Sem localização definida'}</div>
           </div>
           <div style="display:flex;gap:6px">
             <button class="action secondary edit-room-btn" data-id="${r.id}" style="padding:6px 10px;font-size:12px">Editar</button>
@@ -2985,13 +3349,14 @@ async function renderMapa() {
         </div>
         <div id="roomEditForm-${r.id}" style="display:none;gap:10px;align-items:flex-end;flex-wrap:wrap">
           <div class="field" style="margin-bottom:0"><label>Nome</label><input id="roomEditName-${r.id}" value="${escapeHtml(r.name)}"></div>
-          <div class="field" style="margin-bottom:0"><label>Endereço</label><input id="roomEditAddress-${r.id}" value="${escapeHtml(r.address || '')}"></div>
+          <div class="field" style="margin-bottom:0"><label>Localização</label><select id="roomEditLocation-${r.id}">${locationOptions(r.location_id)}</select></div>
           <button class="action save-room-edit-btn" data-id="${r.id}" style="padding:9px 14px">Salvar</button>
           <button class="action secondary cancel-room-edit-btn" data-id="${r.id}" style="padding:9px 14px">Cancelar</button>
         </div>
         <div class="message" id="roomEditMsg-${r.id}"></div>
         <div id="roomDetail-${r.id}" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid #e5e9ef"></div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     wrap.querySelectorAll('.delete-room').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -3019,7 +3384,7 @@ async function renderMapa() {
       btn.addEventListener('click', async () => {
         const id = btn.dataset.id;
         const name = document.getElementById(`roomEditName-${id}`).value.trim();
-        const address = document.getElementById(`roomEditAddress-${id}`).value.trim() || null;
+        const locationId = document.getElementById(`roomEditLocation-${id}`).value || null;
         const msgEl = document.getElementById(`roomEditMsg-${id}`);
         msgEl.style.display = 'none';
 
@@ -3029,7 +3394,10 @@ async function renderMapa() {
           return;
         }
 
-        const { error } = await db.from('rooms').update({ name, address }).eq('id', id);
+        const loc = locationsCache.find(l => l.id === locationId);
+        const address = loc ? loc.address : null;
+
+        const { error } = await db.from('rooms').update({ name, location_id: locationId, address }).eq('id', id);
         if (error) {
           msgEl.textContent = error.code === '23505' ? 'Já existe uma sala com esse nome.' : 'Erro ao salvar: ' + error.message;
           msgEl.className = 'message error'; msgEl.style.display = 'block';
@@ -3055,19 +3423,32 @@ async function renderMapa() {
   }
 
   async function loadRoomDetail(roomId, detailEl) {
-    const [{ data: slots }, { data: interns }, { data: staffing }] = await Promise.all([
+    const [{ data: slots }, { data: interns }, { data: staffing }, { data: roomRow }] = await Promise.all([
       db.from('room_schedule_slots').select('*').eq('room_id', roomId).order('weekday').order('start_time'),
       db.from('interns').select('id').eq('status', 'ativo'),
-      db.from('room_staffing').select('*').eq('room_id', roomId)
+      db.from('room_staffing').select('*').eq('room_id', roomId),
+      db.from('rooms').select('name, location_id').eq('id', roomId).single()
     ]);
 
     const internIds = (interns || []).map(i => i.id);
-    const [{ data: profiles }, { data: allAvail }] = await Promise.all([
+    const [{ data: profiles }, { data: allAvail }, { data: allLocationPrefs }] = await Promise.all([
       internIds.length ? db.from('profiles').select('id, full_name').in('id', internIds) : { data: [] },
-      internIds.length ? db.from('intern_availability').select('*').in('intern_id', internIds) : { data: [] }
+      internIds.length ? db.from('intern_availability').select('*').in('intern_id', internIds) : { data: [] },
+      internIds.length ? db.from('intern_location_preferences').select('intern_id, location_id').in('intern_id', internIds) : { data: [] }
     ]);
     const nameById = {};
     (profiles || []).forEach(p => { nameById[p.id] = p.full_name; });
+
+    const roomLocationId = roomRow ? roomRow.location_id : null;
+
+    // Se o estagiário nunca marcou nenhuma preferência de endereço, ele topa qualquer um.
+    const internsWithAnyPref = new Set((allLocationPrefs || []).map(p => p.intern_id));
+    const internsWillingHere = new Set(
+      (allLocationPrefs || []).filter(p => roomLocationId && p.location_id === roomLocationId).map(p => p.intern_id)
+    );
+    const isWillingForThisRoom = (internId) => !roomLocationId || !internsWithAnyPref.has(internId) || internsWillingHere.has(internId);
+
+    const roomName = roomRow ? roomRow.name : null;
 
     detailEl.innerHTML = `
       <div style="font-weight:700;margin-bottom:8px">Adicionar horário nesta sala</div>
@@ -3117,20 +3498,21 @@ async function renderMapa() {
       const rows = daySlots.slice().sort((a, b) => a.start_time.localeCompare(b.start_time)).map(s => {
         const current = (staffing || []).find(st => st.weekday === s.weekday && st.start_time.slice(0, 5) === s.start_time.slice(0, 5));
         // Domingo não tem disponibilidade pessoal cadastrável pelo estagiário ainda,
-        // então nesse caso mostramos todos os ativos, sem filtrar.
-        const eligibleInterns = s.weekday === 0
+        // então nesse caso mostramos todos os ativos que topam esta sala.
+        const eligibleInterns = (s.weekday === 0
           ? (interns || []).map(i => i.id)
           : (allAvail || [])
               .filter(a => a.weekday === s.weekday && a.start_time.slice(0, 5) === s.start_time.slice(0, 5))
-              .map(a => a.intern_id);
+              .map(a => a.intern_id)
+        ).filter(isWillingForThisRoom);
 
         const staffingCell = !s.enabled ? '<span class="muted">Sala fechada neste horário</span>' : `
           <select class="staffing-select" data-room="${roomId}" data-weekday="${s.weekday}" data-start="${s.start_time}" data-end="${s.end_time}" data-current="${current ? current.intern_id : ''}">
             <option value="">Ninguém ensalado</option>
             ${eligibleInterns.map(iid => `<option value="${iid}" ${current && current.intern_id === iid ? 'selected' : ''}>${escapeHtml(nameById[iid] || '?')}</option>`).join('')}
           </select>
-          ${s.weekday === 0 ? '<div class="muted" style="font-size:11px;margin-top:2px">Domingo: lista com todos os estagiários ativos (sem filtro de disponibilidade)</div>' : ''}
-          ${s.weekday !== 0 && eligibleInterns.length === 0 ? '<div class="muted" style="font-size:11px;margin-top:2px">Nenhum estagiário com disponibilidade pessoal aqui</div>' : ''}`;
+          ${s.weekday === 0 ? '<div class="muted" style="font-size:11px;margin-top:2px">Domingo: sem filtro de disponibilidade, só de sala</div>' : ''}
+          ${eligibleInterns.length === 0 ? '<div class="muted" style="font-size:11px;margin-top:2px">Nenhum estagiário disponível e disposto a atender aqui</div>' : ''}`;
 
         return `<tr>
           <td>${formatHM(s.start_time)}–${formatHM(s.end_time)}</td>
@@ -3160,14 +3542,38 @@ async function renderMapa() {
       slotsWrap.querySelectorAll('.staffing-select').forEach(sel => {
         sel.addEventListener('change', async () => {
           const { room, weekday, start, end } = sel.dataset;
+          const newInternId = sel.value || null;
+
           await db.from('room_staffing').delete().eq('room_id', room).eq('weekday', weekday).eq('start_time', start);
-          if (sel.value) {
-            await db.from('room_staffing').insert([{ room_id: room, intern_id: sel.value, weekday: parseInt(weekday), start_time: start, end_time: end }]);
+          if (newInternId) {
+            await db.from('room_staffing').insert([{ room_id: room, intern_id: newInternId, weekday: parseInt(weekday), start_time: start, end_time: end }]);
           }
           const idx = (staffing || []).findIndex(st => st.weekday === parseInt(weekday) && st.start_time.slice(0, 5) === start.slice(0, 5));
           if (idx >= 0) staffing.splice(idx, 1);
-          if (sel.value) staffing.push({ room_id: room, intern_id: sel.value, weekday: parseInt(weekday), start_time: start, end_time: end });
+          if (newInternId) staffing.push({ room_id: room, intern_id: newInternId, weekday: parseInt(weekday), start_time: start, end_time: end });
           renderDayTabs();
+
+          // Se já existirem agendamentos ativos nesta sala/horário com outro estagiário, oferece atualizar
+          if (newInternId && roomName) {
+            const { data: matchingSeries } = await db.from('appointment_series')
+              .select('id, intern_id')
+              .eq('room', roomName).eq('weekday', parseInt(weekday)).eq('start_time', start).eq('status', 'ativa');
+
+            const toUpdate = (matchingSeries || []).filter(s => s.intern_id !== newInternId);
+            if (toUpdate.length > 0) {
+              const internLabel = nameById[newInternId] || 'o novo estagiário';
+              const doUpdate = confirm(`Há ${toUpdate.length} agendamento(s) ativo(s) nesta sala/horário com outro estagiário. Deseja atualizá-los para ${internLabel}?`);
+              if (doUpdate) {
+                for (const s of toUpdate) {
+                  await db.from('appointment_series').update({ intern_id: newInternId }).eq('id', s.id);
+                  await db.from('appointments').update({ intern_id: newInternId })
+                    .eq('series_id', s.id).eq('status', 'agendado').eq('attendance_status', 'pendente')
+                    .gte('appointment_date', toDateStr(new Date()));
+                }
+                alert('Agendamentos atualizados.');
+              }
+            }
+          }
         });
       });
     }
@@ -3207,19 +3613,23 @@ async function renderMapa() {
 
   document.getElementById('addRoomBtn').addEventListener('click', async () => {
     const nameInput = document.getElementById('newRoomName');
-    const addressInput = document.getElementById('newRoomAddress');
+    const locationSelect = document.getElementById('newRoomLocation');
     const name = nameInput.value.trim();
-    const address = addressInput.value.trim() || null;
+    const locationId = locationSelect.value || null;
     roomsMsg.style.display = 'none';
     if (!name) return;
-    const { data: newRoom, error } = await db.from('rooms').insert([{ name, address }]).select().single();
+
+    const loc = locationsCache.find(l => l.id === locationId);
+    const address = loc ? loc.address : null;
+
+    const { data: newRoom, error } = await db.from('rooms').insert([{ name, location_id: locationId, address }]).select().single();
     if (error) {
       roomsMsg.textContent = 'Erro ao adicionar: ' + error.message;
       roomsMsg.className = 'message error'; roomsMsg.style.display = 'block';
       return;
     }
     await seedRoomSlots(newRoom.id);
-    nameInput.value = ''; addressInput.value = '';
+    nameInput.value = ''; locationSelect.value = '';
     await loadRooms();
     await loadMapaGrid();
   });
@@ -3328,6 +3738,7 @@ async function renderMapa() {
     gridWrap.innerHTML = html;
   }
 
+  await loadLocations();
   await loadRooms();
   await loadMapaGrid();
 }
@@ -3417,7 +3828,7 @@ async function renderAgenda() {
       <div id="apptFormMsg" class="message"></div>
 
       <div id="apptModeEstagiario">
-        <div class="field"><label>Paciente *</label><select id="fPatient"><option value="">Selecione...</option></select></div>
+        <div class="field"><label>Paciente (Em contato) *</label><select id="fPatient"><option value="">Selecione...</option></select></div>
         <div class="field"><label>Estagiário *</label><select id="fIntern" disabled><option value="">Escolha o paciente primeiro</option></select></div>
         <div class="field"><label>Dia e horário *</label><select id="fSlot" disabled><option value="">Escolha o estagiário primeiro</option></select></div>
         <div class="field"><label>Sala (opcional)</label><select id="fRoom"><option value="">Nenhuma</option></select></div>
@@ -3426,7 +3837,7 @@ async function renderAgenda() {
       <div id="apptModeSala" style="display:none">
         <div class="field"><label>Sala *</label><select id="fSalaRoom"><option value="">Selecione...</option></select></div>
         <div class="field"><label>Dia e horário *</label><select id="fSalaSlot" disabled><option value="">Escolha a sala primeiro</option></select></div>
-        <div class="field"><label>Paciente *</label><select id="fSalaPatient" disabled><option value="">Escolha o dia e horário primeiro</option></select></div>
+        <div class="field"><label>Paciente (Em contato) *</label><select id="fSalaPatient" disabled><option value="">Escolha o dia e horário primeiro</option></select></div>
       </div>
 
       <div class="field"><label>Data de início *</label><input type="date" id="fStartDate"></div>
@@ -3443,39 +3854,57 @@ async function renderAgenda() {
       </div>
     </section>
 
-    <div id="cancelReasonModal" class="modal-overlay">
-      <div class="modal-box">
-        <h3 style="margin-top:0">Cancelar atendimento</h3>
-        <div class="field">
-          <label>Motivo do cancelamento</label>
-          <select id="cancelReasonSelect">
-            <option value="paciente_nao_respondeu">Paciente não respondeu</option>
-            <option value="paciente_nao_podera_comparecer">Paciente não poderá comparecer</option>
-            <option value="estagiario_nao_confirmou">Estagiário não confirmou</option>
-            <option value="estagiario_nao_podera_comparecer">Estagiário não poderá comparecer</option>
-          </select>
-        </div>
-        <div style="display:flex;gap:10px;margin-top:14px">
-          <button id="confirmCancelReasonBtn" class="action">Confirmar cancelamento</button>
-          <button id="closeCancelModalBtn" class="action secondary">Voltar</button>
-        </div>
-      </div>
-    </div>
+    <div id="apptDetailModal" class="modal-overlay">
+      <div class="modal-box" style="width:min(620px,100%);max-height:90vh;overflow:auto">
+        <h3 style="margin-top:0">Detalhes do atendimento</h3>
+        <div id="apptDetailInfo" class="muted" style="margin-bottom:14px"></div>
+        <div id="apptDetailMsg" class="message"></div>
 
-    <div id="editSeriesModal" class="modal-overlay">
-      <div class="modal-box" style="width:min(560px,100%)">
-        <h3 style="margin-top:0">Editar agendamento</h3>
-        <div id="editSeriesInfo" class="muted" style="margin-bottom:14px"></div>
-        <div id="editSeriesMsg" class="message"></div>
-        <div class="field"><label>Dia e horário</label><select id="editSeriesSlot"><option value="">Carregando...</option></select></div>
-        <div class="field"><label>Data de término</label><input type="date" id="editSeriesEndDate"></div>
-        <div class="field"><label>Sala (opcional)</label><select id="editSeriesRoom"><option value="">Nenhuma</option></select></div>
-        <div class="muted" style="font-size:12px;margin-bottom:10px">
-          Atendimentos já realizados, ausentes ou cancelados não são alterados. Apenas os atendimentos futuros ainda pendentes serão recriados conforme as novas configurações.
+        <div id="apptDetailCancelledBox" style="display:none;margin-bottom:16px;padding:12px;background:#fdecec;border-radius:8px;font-size:13px"></div>
+        <button id="apptReactivateBtn" class="action" style="display:none;margin-bottom:16px">Reativar este atendimento</button>
+
+        <div id="apptDetailActiveSection">
+          <div style="font-weight:700;margin-bottom:8px">Este atendimento</div>
+          <div class="field"><label>Data</label><input type="date" id="detailApptDate"></div>
+          <div class="field"><label>Início</label><input type="time" id="detailApptStart"></div>
+          <div class="field"><label>Término</label><input type="time" id="detailApptEnd"></div>
+          <div class="field"><label>Sala</label><select id="detailApptRoom"><option value="">Nenhuma</option></select></div>
+          <button id="saveApptOnlyBtn" class="action">Salvar este atendimento</button>
+
+          <div style="margin:24px 0;border-top:1px solid #e5e9ef"></div>
+
+          <div style="font-weight:700;margin-bottom:8px">Série completa (semanal)</div>
+          <div class="field"><label>Dia e horário recorrente</label><select id="detailSeriesSlot"><option value="">Carregando...</option></select></div>
+          <div class="field"><label>Data de início da série</label><input type="date" id="detailSeriesStart">
+            <div class="muted" style="font-size:12px;margin-top:4px">Só corrige o registro. Não recria nem move nenhum atendimento sozinha.</div>
+          </div>
+          <div class="field"><label>Data de término</label><input type="date" id="detailSeriesEnd"></div>
+          <div class="field"><label>Sala padrão da série</label><select id="detailSeriesRoom"><option value="">Nenhuma</option></select></div>
+          <div class="muted" style="font-size:12px;margin-bottom:10px">Atendimentos já realizados, ausentes ou cancelados não são alterados. Apenas os futuros ainda pendentes serão recriados.</div>
+          <button id="saveSeriesFromDetailBtn" class="action">Salvar série completa</button>
+
+          <div style="margin:24px 0;border-top:1px solid #e5e9ef"></div>
+
+          <div id="cancelSectionWrap">
+            <button id="openCancelSectionBtn" class="action secondary" style="color:#b42318">Cancelar este atendimento</button>
+            <button id="hardDeleteFromDetailBtn" class="action secondary" style="color:#b42318;margin-left:8px;display:none" title="Exclui de vez, sem deixar rastro. Só para atendimentos que ainda não aconteceram.">Excluir de vez</button>
+            <div id="cancelReasonInlineWrap" style="display:none;margin-top:12px">
+              <div class="field"><label>Motivo do cancelamento</label>
+                <select id="detailCancelReason">
+                  <option value="paciente_nao_respondeu">Paciente não respondeu</option>
+                  <option value="paciente_nao_podera_comparecer">Paciente não poderá comparecer</option>
+                  <option value="estagiario_nao_confirmou">Estagiário não confirmou</option>
+                  <option value="estagiario_nao_podera_comparecer">Estagiário não poderá comparecer</option>
+                </select>
+              </div>
+              <button id="confirmCancelFromDetailBtn" class="action" style="background:#b42318">Confirmar cancelamento</button>
+              <button id="cancelCancelInlineBtn" class="action secondary">Voltar</button>
+            </div>
+          </div>
         </div>
-        <div style="display:flex;gap:10px;margin-top:8px">
-          <button id="saveEditSeriesBtn" class="action">Salvar alterações</button>
-          <button id="closeEditSeriesBtn" class="action secondary">Voltar</button>
+
+        <div style="margin-top:20px">
+          <button id="closeApptDetailBtn" class="action secondary">Fechar</button>
         </div>
       </div>
     </div>`;
@@ -3484,9 +3913,9 @@ async function renderAgenda() {
   const panel = document.getElementById('apptFormPanel');
   const msg = document.getElementById('apptFormMsg');
 
-  // ---- Dados de apoio (pacientes e estagiários ativos) ----
+  // ---- Dados de apoio (pacientes "Em contato" e estagiários ativos) ----
   const [{ data: patients }, { data: interns }] = await Promise.all([
-    db.from('patients').select('id, registration_number, full_name').eq('status', 'ativo'),
+    db.from('patients').select('id, registration_number, full_name').eq('status', 'em_contato'),
     db.from('interns').select('id').eq('status', 'ativo')
   ]);
   const internIds = (interns || []).map(i => i.id);
@@ -3499,7 +3928,7 @@ async function renderAgenda() {
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
   const patientsList = (patients || []).sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
 
-  const { data: clinicSlots } = await db.from('clinic_schedule_slots').select('*').eq('enabled', true);
+  const clinicSlots = (await getEffectiveClinicSlots()).filter(s => s.enabled);
   const { data: allInternAvail } = internIds.length
     ? await db.from('intern_availability').select('*').in('intern_id', internIds)
     : { data: [] };
@@ -3601,9 +4030,8 @@ async function renderAgenda() {
     const reasonLabel = a.cancellation_reason ? CANCELLATION_REASON_LABELS[a.cancellation_reason] || '' : '';
     const acaoCell = isCancelled
       ? `<span title="${escapeHtml(reasonLabel)}" style="font-size:12px;color:#9a6700;font-weight:700">Cancelado por ${whoCancelledLabel}</span>
-         <button class="action secondary uncancel-appt" data-id="${a.id}" style="padding:3px 8px;font-size:11px;margin-left:6px">Reativar</button>`
-      : `<button class="action secondary edit-series-btn" data-series-id="${a.series_id}" style="padding:4px 8px;font-size:12px">Editar</button>
-         <button class="action secondary cancel-appt" data-id="${a.id}" style="padding:4px 8px;font-size:12px;color:#b42318">Cancelar</button>`;
+         <button class="action secondary open-appt-detail-btn" data-id="${a.id}" style="padding:3px 8px;font-size:11px;margin-left:6px">Editar</button>`
+      : `<button class="action secondary open-appt-detail-btn" data-id="${a.id}" style="padding:4px 8px;font-size:12px">Editar</button>`;
 
     const horarioCell = `${a.start_time.slice(0,5)}–${a.end_time.slice(0,5)}${a.room ? `<br><small class="muted">${escapeHtml(a.room)}</small>` : ''}`;
 
@@ -3700,126 +4128,209 @@ async function renderAgenda() {
       });
     });
 
-    listWrap.querySelectorAll('.uncancel-appt').forEach(btn => {
-      btn.addEventListener('click', async () => {
+    listWrap.querySelectorAll('.open-appt-detail-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const found = (appts || []).find(x => x.id === btn.dataset.id);
+        if (found) openApptDetailModal(found);
+      });
+    });
+  }
+
+  // ---- Modal único de detalhes/edição do atendimento ----
+  const apptDetailModal = document.getElementById('apptDetailModal');
+  document.getElementById('closeApptDetailBtn').onclick = () => { apptDetailModal.style.display = 'none'; };
+
+  async function openApptDetailModal(a) {
+    const msgEl = document.getElementById('apptDetailMsg');
+    const infoEl = document.getElementById('apptDetailInfo');
+    const cancelledBox = document.getElementById('apptDetailCancelledBox');
+    const reactivateBtn = document.getElementById('apptReactivateBtn');
+    const activeSection = document.getElementById('apptDetailActiveSection');
+    msgEl.style.display = 'none';
+    apptDetailModal.style.display = 'flex';
+
+    const patLabel = a.patients ? `#${a.patients.registration_number} ${a.patients.full_name || ''}` : '—';
+    const internName = nameById[a.intern_id] || '?';
+    infoEl.innerHTML = `Paciente: <strong>${escapeHtml(patLabel)}</strong> · Estagiário: <strong>${escapeHtml(internName)}</strong>`;
+
+    const isCancelledAppt = a.status === 'cancelado';
+
+    if (isCancelledAppt) {
+      const whoCancelledLabel2 = { paciente: 'Paciente', estagiario: 'Estagiário', coordenacao: 'Coordenação' }[a.cancelled_by] || '';
+      const reasonLabel2 = a.cancellation_reason ? CANCELLATION_REASON_LABELS[a.cancellation_reason] || '' : '';
+      cancelledBox.innerHTML = `Cancelado por <strong>${escapeHtml(whoCancelledLabel2)}</strong>${reasonLabel2 ? ' — ' + escapeHtml(reasonLabel2) : ''}`;
+      cancelledBox.style.display = 'block';
+      reactivateBtn.style.display = 'block';
+      activeSection.style.display = 'none';
+
+      reactivateBtn.onclick = async () => {
         if (!confirm('Reativar este atendimento? Ele voltará para o status agendado.')) return;
         const { error } = await db.from('appointments').update({
           status: 'agendado', cancelled_by: null, cancelled_at: null, cancellation_reason: null
-        }).eq('id', btn.dataset.id);
-        if (error) alert('Erro: ' + error.message); else loadAppointments();
-      });
-    });
+        }).eq('id', a.id);
+        if (error) { alert('Erro: ' + error.message); return; }
+        apptDetailModal.style.display = 'none';
+        loadAppointments();
+      };
+      return;
+    }
 
-    const cancelModal = document.getElementById('cancelReasonModal');
-    let cancelTargetId = null;
+    cancelledBox.style.display = 'none';
+    reactivateBtn.style.display = 'none';
+    activeSection.style.display = 'block';
 
-    listWrap.querySelectorAll('.cancel-appt').forEach(btn => {
-      btn.addEventListener('click', () => {
-        cancelTargetId = btn.dataset.id;
-        document.getElementById('cancelReasonSelect').value = 'paciente_nao_respondeu';
-        cancelModal.style.display = 'flex';
-      });
-    });
+    // ---- Este atendimento ----
+    document.getElementById('detailApptDate').value = a.appointment_date;
+    document.getElementById('detailApptStart').value = a.start_time.slice(0, 5);
+    document.getElementById('detailApptEnd').value = a.end_time.slice(0, 5);
+    const detailRoomSelect = document.getElementById('detailApptRoom');
+    detailRoomSelect.innerHTML = '<option value="">Nenhuma</option>' +
+      (roomsList || []).map(r => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
+    detailRoomSelect.value = a.room || '';
 
-    document.getElementById('closeCancelModalBtn').onclick = () => { cancelModal.style.display = 'none'; cancelTargetId = null; };
-    document.getElementById('confirmCancelReasonBtn').onclick = async () => {
-      if (!cancelTargetId) return;
-      const reason = document.getElementById('cancelReasonSelect').value;
-      await db.from('appointments').update({
-        status: 'cancelado', cancelled_by: 'coordenacao', cancelled_at: new Date().toISOString(),
-        cancellation_reason: reason
-      }).eq('id', cancelTargetId);
-      cancelModal.style.display = 'none';
-      cancelTargetId = null;
+    document.getElementById('saveApptOnlyBtn').onclick = async () => {
+      msgEl.style.display = 'none';
+      const newDate = document.getElementById('detailApptDate').value;
+      const newStart = document.getElementById('detailApptStart').value;
+      const newEnd = document.getElementById('detailApptEnd').value;
+      const newRoomOnly = detailRoomSelect.value || null;
+      if (!newDate || !newStart || !newEnd || newStart >= newEnd) {
+        msgEl.textContent = 'Verifique a data e os horários (início antes do término).';
+        msgEl.className = 'message error'; msgEl.style.display = 'block';
+        return;
+      }
+      const btn = document.getElementById('saveApptOnlyBtn');
+      btn.disabled = true; btn.textContent = 'Salvando...';
+      const { error } = await db.from('appointments').update({
+        appointment_date: newDate, start_time: newStart, end_time: newEnd, room: newRoomOnly
+      }).eq('id', a.id);
+      btn.disabled = false; btn.textContent = 'Salvar este atendimento';
+      if (error) {
+        msgEl.textContent = 'Erro ao salvar: ' + error.message;
+        msgEl.className = 'message error'; msgEl.style.display = 'block';
+        return;
+      }
+      apptDetailModal.style.display = 'none';
       loadAppointments();
     };
 
-    // ---- Editar série (agendamento) ----
-    const editModal = document.getElementById('editSeriesModal');
-    const editSlotSelect = document.getElementById('editSeriesSlot');
-    const editEndDate = document.getElementById('editSeriesEndDate');
-    const editInfo = document.getElementById('editSeriesInfo');
-    const editMsg = document.getElementById('editSeriesMsg');
-    let editingSeries = null;
+    // ---- Cancelar / Excluir ----
+    const cancelReasonWrap = document.getElementById('cancelReasonInlineWrap');
+    cancelReasonWrap.style.display = 'none';
+    document.getElementById('openCancelSectionBtn').onclick = () => {
+      cancelReasonWrap.style.display = 'block';
+      document.getElementById('detailCancelReason').value = 'paciente_nao_respondeu';
+    };
+    document.getElementById('cancelCancelInlineBtn').onclick = () => { cancelReasonWrap.style.display = 'none'; };
+    document.getElementById('confirmCancelFromDetailBtn').onclick = async () => {
+      const reason = document.getElementById('detailCancelReason').value;
+      const { error } = await db.from('appointments').update({
+        status: 'cancelado', cancelled_by: 'coordenacao', cancelled_at: new Date().toISOString(), cancellation_reason: reason
+      }).eq('id', a.id);
+      if (error) { alert('Erro: ' + error.message); return; }
+      apptDetailModal.style.display = 'none';
+      loadAppointments();
+    };
 
-    listWrap.querySelectorAll('.edit-series-btn').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        editMsg.style.display = 'none';
-        editSlotSelect.innerHTML = '<option value="">Carregando...</option>';
-        editInfo.textContent = 'Carregando...';
-        editModal.style.display = 'flex';
+    const hardDeleteBtn = document.getElementById('hardDeleteFromDetailBtn');
+    if (a.attendance_status === 'pendente') {
+      hardDeleteBtn.style.display = 'inline-block';
+      hardDeleteBtn.onclick = async () => {
+        if (!confirm('Excluir este atendimento de vez? Isso é diferente de cancelar — não fica nenhum registro no histórico. Use só para erros, como duplicatas.')) return;
+        const { error } = await db.from('appointments').delete().eq('id', a.id);
+        if (error) { alert('Erro ao excluir: ' + error.message); return; }
+        apptDetailModal.style.display = 'none';
+        loadAppointments();
+      };
+    } else {
+      hardDeleteBtn.style.display = 'none';
+    }
 
-        const { data: series, error: seriesErr } = await db.from('appointment_series').select('*').eq('id', btn.dataset.seriesId).single();
-        if (seriesErr) { editInfo.textContent = 'Erro ao carregar: ' + seriesErr.message; return; }
-        editingSeries = series;
+    // ---- Série completa ----
+    const seriesSlotSelect = document.getElementById('detailSeriesSlot');
+    const seriesStartInput = document.getElementById('detailSeriesStart');
+    const seriesEndInput = document.getElementById('detailSeriesEnd');
+    const seriesRoomSelect = document.getElementById('detailSeriesRoom');
+    seriesSlotSelect.innerHTML = '<option value="">Carregando...</option>';
 
-        const patientName = (() => {
-          const p = (appts || []).find(x => x.patient_id === series.patient_id)?.patients;
-          return p ? `#${p.registration_number} ${p.full_name || ''}` : series.patient_id;
-        })();
-        const internName = nameById[series.intern_id] || '?';
-        editInfo.innerHTML = `Paciente: <strong>${escapeHtml(patientName)}</strong> · Estagiário: <strong>${escapeHtml(internName)}</strong>`;
+    const { data: series, error: seriesErr } = await db.from('appointment_series').select('*').eq('id', a.series_id).single();
+    if (seriesErr || !series) {
+      seriesSlotSelect.innerHTML = '<option value="">Erro ao carregar série</option>';
+      return;
+    }
 
-        const [{ data: clinicSlots }, { data: internAvail }, { data: patAvail }] = await Promise.all([
-          db.from('clinic_schedule_slots').select('*').eq('enabled', true),
-          db.from('intern_availability').select('weekday, start_time').eq('intern_id', series.intern_id),
-          db.from('patient_availability').select('weekday, start_time').eq('patient_id', series.patient_id)
-        ]);
+    const [clinicSlotsAll, { data: internAvail }, { data: patAvail }] = await Promise.all([
+      getEffectiveClinicSlots(),
+      db.from('intern_availability').select('weekday, start_time').eq('intern_id', series.intern_id),
+      db.from('patient_availability').select('weekday, start_time').eq('patient_id', series.patient_id)
+    ]);
+    const clinicSlots = clinicSlotsAll.filter(s => s.enabled);
 
-        const candidates = (clinicSlots || []).filter(c => {
-          const internMatch = (internAvail || []).some(a => a.weekday === c.weekday && a.start_time.slice(0, 5) === c.start_time.slice(0, 5));
-          if (!internMatch) return false;
-          if (patAvail && patAvail.length > 0) {
-            return patAvail.some(p => p.weekday === c.weekday && p.start_time.slice(0, 5) === c.start_time.slice(0, 5));
-          }
-          return true;
-        }).sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time));
+    const candidates = (clinicSlots || []).filter(c => {
+      const internMatch = (internAvail || []).some(av => av.weekday === c.weekday && av.start_time.slice(0, 5) === c.start_time.slice(0, 5));
+      if (!internMatch) return false;
+      if (patAvail && patAvail.length > 0) {
+        return patAvail.some(p => p.weekday === c.weekday && p.start_time.slice(0, 5) === c.start_time.slice(0, 5));
+      }
+      return true;
+    }).sort((x, y) => x.weekday - y.weekday || x.start_time.localeCompare(y.start_time));
 
-        if (candidates.length === 0) {
-          editSlotSelect.innerHTML = '<option value="">Nenhum horário compatível encontrado</option>';
-        } else {
-          editSlotSelect.innerHTML = candidates.map(c => {
-            const dayLabel = WEEKDAYS.find(d => d.n === c.weekday).l;
-            const val = `${c.weekday}|${c.start_time}|${c.end_time}`;
-            const isCurrent = c.weekday === series.weekday && c.start_time.slice(0, 5) === series.start_time.slice(0, 5);
-            return `<option value="${val}" ${isCurrent ? 'selected' : ''}>${dayLabel} ${c.start_time.slice(0,5)}–${c.end_time.slice(0,5)}</option>`;
-          }).join('');
-        }
+    const isCurrentInCandidates = candidates.some(c => c.weekday === series.weekday && c.start_time.slice(0, 5) === series.start_time.slice(0, 5));
+    const allOptions = isCurrentInCandidates
+      ? candidates
+      : [{ weekday: series.weekday, start_time: series.start_time, end_time: series.end_time, isCurrentOnly: true }, ...candidates];
 
-        editEndDate.value = series.series_end;
-        const editRoomSelect = document.getElementById('editSeriesRoom');
-        editRoomSelect.innerHTML = '<option value="">Nenhuma</option>' +
-          (roomsList || []).map(r => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
-        editRoomSelect.value = series.room || '';
-      });
-    });
+    if (allOptions.length === 0) {
+      seriesSlotSelect.innerHTML = '<option value="">Nenhum horário compatível encontrado</option>';
+    } else {
+      seriesSlotSelect.innerHTML = allOptions.map(c => {
+        const dayLabel = WEEKDAYS.find(d => d.n === c.weekday).l;
+        const val = `${c.weekday}|${c.start_time}|${c.end_time}`;
+        const isCurrent = c.weekday === series.weekday && c.start_time.slice(0, 5) === series.start_time.slice(0, 5);
+        const label = c.isCurrentOnly
+          ? `${dayLabel} ${c.start_time.slice(0,5)}–${c.end_time.slice(0,5)} (atual)`
+          : `${dayLabel} ${c.start_time.slice(0,5)}–${c.end_time.slice(0,5)}`;
+        return `<option value="${val}" ${isCurrent ? 'selected' : ''}>${label}</option>`;
+      }).join('');
+      if (!isCurrentInCandidates) {
+        msgEl.textContent = 'Atenção: o horário atual desta série não bate mais com os critérios calculados (disponibilidade do estagiário/paciente). Ele foi mantido selecionado para não mudar nada sem querer — troque manualmente se quiser um horário diferente.';
+        msgEl.className = 'message error'; msgEl.style.display = 'block';
+      }
+    }
 
-    document.getElementById('closeEditSeriesBtn').onclick = () => { editModal.style.display = 'none'; editingSeries = null; };
+    seriesStartInput.value = series.series_start;
+    seriesEndInput.value = series.series_end;
+    seriesRoomSelect.innerHTML = '<option value="">Nenhuma</option>' +
+      (roomsList || []).map(r => `<option value="${escapeHtml(r.name)}">${escapeHtml(r.name)}</option>`).join('');
+    seriesRoomSelect.value = series.room || '';
 
-    document.getElementById('saveEditSeriesBtn').onclick = async () => {
-      if (!editingSeries) return;
-      editMsg.style.display = 'none';
-
-      const slotVal = editSlotSelect.value;
-      const newEndDate = editEndDate.value;
-      const newRoom = document.getElementById('editSeriesRoom').value.trim() || null;
-      if (!slotVal || !newEndDate) {
-        editMsg.textContent = 'Selecione o horário e a data de término.';
-        editMsg.className = 'message error'; editMsg.style.display = 'block';
+    document.getElementById('saveSeriesFromDetailBtn').onclick = async () => {
+      msgEl.style.display = 'none';
+      const slotVal = seriesSlotSelect.value;
+      const newStartDate = seriesStartInput.value;
+      const newEndDate = seriesEndInput.value;
+      const newRoom = seriesRoomSelect.value || null;
+      if (!slotVal || !newStartDate || !newEndDate) {
+        msgEl.textContent = 'Selecione o horário, a data de início e a data de término.';
+        msgEl.className = 'message error'; msgEl.style.display = 'block';
+        return;
+      }
+      if (newStartDate > newEndDate) {
+        msgEl.textContent = 'A data de início não pode ser depois da data de término.';
+        msgEl.className = 'message error'; msgEl.style.display = 'block';
         return;
       }
       if (newEndDate < toDateStr(new Date())) {
-        editMsg.textContent = 'A data de término não pode ser no passado.';
-        editMsg.className = 'message error'; editMsg.style.display = 'block';
+        msgEl.textContent = 'A data de término não pode ser no passado.';
+        msgEl.className = 'message error'; msgEl.style.display = 'block';
         return;
       }
 
       const [weekdayStr, newStart, newEnd] = slotVal.split('|');
       const newWeekday = parseInt(weekdayStr);
-      const btn = document.getElementById('saveEditSeriesBtn');
+      const btn = document.getElementById('saveSeriesFromDetailBtn');
       btn.disabled = true; btn.textContent = 'Salvando...';
 
-      // Gera as novas datas futuras (a partir de hoje) até a nova data de término
       const todayD = new Date(toDateStr(new Date()) + 'T00:00:00');
       let curr = new Date(todayD);
       while (curr.getDay() !== newWeekday) curr.setDate(curr.getDate() + 1);
@@ -3832,44 +4343,47 @@ async function renderAgenda() {
           .select('appointment_date, start_time, end_time, intern_id, patient_id, series_id')
           .in('appointment_date', newDates).eq('status', 'agendado');
 
-        const hasConflict = (conflicts || []).some(c => c.series_id !== editingSeries.id &&
-          (c.intern_id === editingSeries.intern_id || c.patient_id === editingSeries.patient_id) &&
+        const hasConflict = (conflicts || []).some(c => c.series_id !== series.id &&
+          (c.intern_id === series.intern_id || c.patient_id === series.patient_id) &&
           timesOverlap(c.start_time, c.end_time, newStart, newEnd));
 
         if (hasConflict) {
-          editMsg.textContent = 'Conflito: o estagiário ou o paciente já têm atendimento em horário sobreposto em pelo menos uma dessas datas.';
-          editMsg.className = 'message error'; editMsg.style.display = 'block';
-          btn.disabled = false; btn.textContent = 'Salvar alterações';
+          msgEl.textContent = 'Conflito: o estagiário ou o paciente já têm atendimento em horário sobreposto em pelo menos uma dessas datas.';
+          msgEl.className = 'message error'; msgEl.style.display = 'block';
+          btn.disabled = false; btn.textContent = 'Salvar série completa';
           return;
         }
       }
 
-      // Remove os atendimentos futuros ainda pendentes desta série
       const { error: delErr } = await db.from('appointments').delete()
-        .eq('series_id', editingSeries.id).eq('status', 'agendado').eq('attendance_status', 'pendente')
+        .eq('series_id', series.id).eq('status', 'agendado').eq('attendance_status', 'pendente')
         .gte('appointment_date', toDateStr(new Date()));
       if (delErr) {
-        editMsg.textContent = 'Erro ao atualizar: ' + delErr.message;
-        editMsg.className = 'message error'; editMsg.style.display = 'block';
-        btn.disabled = false; btn.textContent = 'Salvar alterações';
+        msgEl.textContent = 'Erro ao atualizar: ' + delErr.message;
+        msgEl.className = 'message error'; msgEl.style.display = 'block';
+        btn.disabled = false; btn.textContent = 'Salvar série completa';
         return;
       }
 
       await db.from('appointment_series').update({
-        weekday: newWeekday, start_time: newStart, end_time: newEnd, series_end: newEndDate, room: newRoom
-      }).eq('id', editingSeries.id);
+        weekday: newWeekday, start_time: newStart, end_time: newEnd,
+        series_start: newStartDate, series_end: newEndDate, room: newRoom
+      }).eq('id', series.id);
 
       if (newDates.length > 0) {
         const newAppts = newDates.map(d => ({
-          series_id: editingSeries.id, patient_id: editingSeries.patient_id, intern_id: editingSeries.intern_id,
+          series_id: series.id, patient_id: series.patient_id, intern_id: series.intern_id,
           appointment_date: d, start_time: newStart, end_time: newEnd, room: newRoom, is_first_session: false
         }));
         await db.from('appointments').insert(newAppts);
       }
 
-      editModal.style.display = 'none';
-      editingSeries = null;
-      btn.disabled = false; btn.textContent = 'Salvar alterações';
+      if (newRoom) {
+        await syncRoomStaffing(newRoom, newWeekday, newStart, newEnd, series.intern_id, nameById);
+      }
+
+      btn.disabled = false; btn.textContent = 'Salvar série completa';
+      apptDetailModal.style.display = 'none';
       loadAppointments();
     };
   }
@@ -4159,6 +4673,10 @@ async function renderAgenda() {
         msg.className = 'message error'; msg.style.display = 'block';
         confirmBtn.disabled = false; confirmBtn.textContent = 'Validar e criar atendimentos';
         return;
+      }
+
+      if (apptMode === 'estagiario' && room) {
+        await syncRoomStaffing(room, weekday, startTime, endTime, internId, nameById);
       }
 
       pendingQuickSchedule = null;
