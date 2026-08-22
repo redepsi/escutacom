@@ -2269,8 +2269,15 @@ async function renderPacientes() {
 
     <section id="importPanel" class="panel" style="display:none">
       <div class="toolbar"><h2>Importar pacientes de planilha</h2></div>
-      <div class="muted" style="margin-bottom:12px">A planilha deve ter as colunas: <strong>origem</strong>, <strong>nome</strong>, <strong>whatsapp</strong>. A disponibilidade não vem da planilha; cadastre depois de coletar com cada paciente.</div>
-      <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv">
+      <div class="muted" style="margin-bottom:12px">Colunas esperadas: <strong>origem</strong>, <strong>nome</strong>, <strong>whatsapp</strong>. A disponibilidade não vem da planilha; cadastre depois de coletar com cada paciente.</div>
+      <div class="field"><label>Enviar arquivo (.xlsx, .xls, .csv)</label>
+        <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv">
+      </div>
+      <div class="field">
+        <label>Ou colar direto da planilha (Excel/Google Sheets)</label>
+        <textarea id="importPasteArea" rows="5" placeholder="Cole aqui as linhas copiadas da planilha (com ou sem cabeçalho)"></textarea>
+        <button id="processPasteBtn" class="action secondary" style="margin-top:8px">Processar texto colado</button>
+      </div>
       <div id="importMsg" class="message"></div>
       <div id="importPreviewWrap" style="margin-top:14px"></div>
     </section>
@@ -2747,7 +2754,7 @@ async function renderPacientes() {
     exportReportPdf('Lista de pacientes com estagiário', body);
   });
 
-  // ---- Importar planilha de pacientes ----
+  // ---- Importar planilha de pacientes (arquivo ou texto colado) ----
   const importPanel = document.getElementById('importPanel');
   const importMsg = document.getElementById('importMsg');
   const importPreviewWrap = document.getElementById('importPreviewWrap');
@@ -2758,12 +2765,43 @@ async function renderPacientes() {
     importMsg.style.display = 'none';
     importPreviewWrap.innerHTML = '';
     document.getElementById('importFileInput').value = '';
+    document.getElementById('importPasteArea').value = '';
     importRows = [];
   });
 
   function normalizeHeader(h) {
     return String(h || '').trim().toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // remove acentos
+  }
+
+  function showImportPreview(rows) {
+    importRows = rows;
+
+    if (importRows.length === 0) {
+      importMsg.textContent = 'Nenhuma linha reconhecida. Confira se as colunas se chamam origem, nome e whatsapp.';
+      importMsg.className = 'message error'; importMsg.style.display = 'block';
+      importPreviewWrap.innerHTML = '';
+      return;
+    }
+    importMsg.style.display = 'none';
+
+    const previewRows = importRows.map(r => `<tr>
+      <td>${escapeHtml(r.full_name || '—')}</td>
+      <td>${escapeHtml(r.whatsapp || '—')}</td>
+      <td>${escapeHtml(r.origin || '—')}</td>
+    </tr>`).join('');
+
+    importPreviewWrap.innerHTML = `
+      <div class="muted" style="margin-bottom:8px">${importRows.length} paciente(s) encontrados:</div>
+      <div style="overflow:auto;max-height:300px">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <tr style="text-align:left;font-size:12px;color:#667085"><th>Nome</th><th>WhatsApp</th><th>Origem</th></tr>
+          ${previewRows}
+        </table>
+      </div>
+      <button id="confirmImportBtn" class="action" style="margin-top:12px">Importar ${importRows.length} paciente(s)</button>`;
+
+    document.getElementById('confirmImportBtn').addEventListener('click', runImport);
   }
 
   document.getElementById('importFileInput').addEventListener('change', (e) => {
@@ -2778,7 +2816,7 @@ async function renderPacientes() {
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
-        importRows = rawRows.map(row => {
+        const rows = rawRows.map(row => {
           const mapped = {};
           Object.keys(row).forEach(key => {
             const norm = normalizeHeader(key);
@@ -2789,36 +2827,53 @@ async function renderPacientes() {
           return mapped;
         }).filter(r => r.full_name || r.whatsapp || r.origin);
 
-        if (importRows.length === 0) {
-          importMsg.textContent = 'Nenhuma linha reconhecida. Confira se as colunas se chamam origem, nome e whatsapp.';
-          importMsg.className = 'message error'; importMsg.style.display = 'block';
-          importPreviewWrap.innerHTML = '';
-          return;
-        }
-
-        const previewRows = importRows.map(r => `<tr>
-          <td>${escapeHtml(r.full_name || '—')}</td>
-          <td>${escapeHtml(r.whatsapp || '—')}</td>
-          <td>${escapeHtml(r.origin || '—')}</td>
-        </tr>`).join('');
-
-        importPreviewWrap.innerHTML = `
-          <div class="muted" style="margin-bottom:8px">${importRows.length} paciente(s) encontrados na planilha:</div>
-          <div style="overflow:auto;max-height:300px">
-            <table style="width:100%;border-collapse:collapse;font-size:13px">
-              <tr style="text-align:left;font-size:12px;color:#667085"><th>Nome</th><th>WhatsApp</th><th>Origem</th></tr>
-              ${previewRows}
-            </table>
-          </div>
-          <button id="confirmImportBtn" class="action" style="margin-top:12px">Importar ${importRows.length} paciente(s)</button>`;
-
-        document.getElementById('confirmImportBtn').addEventListener('click', runImport);
+        showImportPreview(rows);
       } catch (err) {
         importMsg.textContent = 'Erro ao ler o arquivo: ' + err.message;
         importMsg.className = 'message error'; importMsg.style.display = 'block';
       }
     };
     reader.readAsArrayBuffer(file);
+  });
+
+  // Colar direto da planilha: aceita com ou sem linha de cabeçalho.
+  // Sem cabeçalho reconhecível, assume a ordem nome, whatsapp, origem.
+  function parsePastedPatients(text) {
+    const lines = text.split(/\r?\n/).map(l => l.replace(/\r/g, '')).filter(l => l.trim().length > 0);
+    if (lines.length === 0) return [];
+
+    const headerCells = lines[0].split('\t').map(normalizeHeader);
+    const knownCols = ['origem', 'nome', 'whatsapp'];
+    const hasHeader = headerCells.some(h => knownCols.includes(h));
+    const headers = hasHeader ? headerCells : ['nome', 'whatsapp', 'origem'];
+    const startIdx = hasHeader ? 1 : 0;
+
+    const rows = [];
+    for (let i = startIdx; i < lines.length; i++) {
+      const cells = lines[i].split('\t');
+      const mapped = {};
+      headers.forEach((h, idx) => {
+        const val = (cells[idx] || '').trim();
+        if (h === 'origem') mapped.origin = val;
+        if (h === 'nome') mapped.full_name = val;
+        if (h === 'whatsapp') mapped.whatsapp = val;
+      });
+      if (mapped.full_name || mapped.whatsapp || mapped.origin) rows.push(mapped);
+    }
+    return rows;
+  }
+
+  function processPasteArea() {
+    const text = document.getElementById('importPasteArea').value;
+    if (!text.trim()) return;
+    document.getElementById('importFileInput').value = '';
+    showImportPreview(parsePastedPatients(text));
+  }
+
+  document.getElementById('processPasteBtn').addEventListener('click', processPasteArea);
+  document.getElementById('importPasteArea').addEventListener('paste', () => {
+    // Processa automaticamente assim que colar; o botão continua disponível para reprocessar depois de editar.
+    setTimeout(processPasteArea, 0);
   });
 
   async function runImport() {
@@ -2847,6 +2902,7 @@ async function renderPacientes() {
     importPreviewWrap.innerHTML = '';
     importRows = [];
     document.getElementById('importFileInput').value = '';
+    document.getElementById('importPasteArea').value = '';
     await loadList();
   }
 
