@@ -3099,10 +3099,11 @@ async function loadContactPanel(patient) {
     return;
   }
 
-  const [{ data: profiles }, { data: allAvail }, { data: allLocPrefs }] = await Promise.all([
+  const [{ data: profiles }, { data: allAvail }, { data: allLocPrefs }, { data: allRoomSlots }] = await Promise.all([
     db.from('profiles').select('id, full_name').in('id', freeInternIds),
     db.from('intern_availability').select('*').in('intern_id', freeInternIds),
-    db.from('intern_location_preferences').select('intern_id, location_id').in('intern_id', freeInternIds)
+    db.from('intern_location_preferences').select('intern_id, location_id').in('intern_id', freeInternIds),
+    db.from('room_schedule_slots').select('weekday, start_time, enabled, rooms(location_id)').eq('enabled', true)
   ]);
 
   const nameById = {};
@@ -3110,6 +3111,16 @@ async function loadContactPanel(patient) {
 
   const locNameById = {};
   (locations || []).forEach(l => { locNameById[l.id] = l.name; });
+
+  // Quais horários (dia+hora) realmente existem abertos em cada localização — usado pra
+  // sinalizar quando o horário que o estagiário marcou não bate com a localização escolhida no filtro.
+  const openSlotsByLocation = {};
+  (allRoomSlots || []).forEach(s => {
+    const locId = s.rooms ? s.rooms.location_id : null;
+    if (!locId) return;
+    if (!openSlotsByLocation[locId]) openSlotsByLocation[locId] = new Set();
+    openSlotsByLocation[locId].add(`${s.weekday}_${s.start_time.slice(0, 5)}`);
+  });
 
   const prefsByIntern = {};
   (allLocPrefs || []).forEach(p => {
@@ -3138,10 +3149,17 @@ async function loadContactPanel(patient) {
     return (availByIntern[internId] || []).some(a => patientAvailSet.has(`${a.weekday}_${a.start_time.slice(0, 5)}`));
   }
 
-  function formatInternSlots(internId) {
+  function formatInternSlots(internId, locationFilter) {
     const slots = (availByIntern[internId] || []).slice().sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time));
     if (slots.length === 0) return 'Sem horários cadastrados';
-    return slots.map(s => `${(WEEKDAYS.find(d => d.n === s.weekday) || {}).l?.slice(0, 3) || s.weekday} ${formatHM(s.start_time)}`).join(', ');
+    const openSet = locationFilter ? openSlotsByLocation[locationFilter] : null;
+    return slots.map(s => {
+      const label = `${(WEEKDAYS.find(d => d.n === s.weekday) || {}).l?.slice(0, 3) || s.weekday} ${formatHM(s.start_time)}`;
+      if (openSet && !openSet.has(`${s.weekday}_${s.start_time.slice(0, 5)}`)) {
+        return `<span style="text-decoration:line-through;color:#b42318" title="Não há esse horário aberto nessa localização">${escapeHtml(label)}</span>`;
+      }
+      return escapeHtml(label);
+    }).join(', ');
   }
 
   let selectedLocationId = '';
@@ -3169,7 +3187,8 @@ async function loadContactPanel(patient) {
               ${isMatch ? '<span style="color:#176b36;font-weight:700;font-size:12px">✓ Bate com a disponibilidade do paciente</span>' : ''}
             </div>
             <div class="muted" style="font-size:12px;margin-top:2px">${escapeHtml(locLabel)}</div>
-            <div style="font-size:12px;margin-top:6px">${escapeHtml(formatInternSlots(id))}</div>
+            <div style="font-size:12px;margin-top:6px">${formatInternSlots(id, selectedLocationId)}</div>
+            <button class="action quick-schedule-from-ficha" data-intern-id="${id}" style="padding:5px 10px;font-size:12px;margin-top:8px">📅 Agendar com este paciente</button>
           </div>`;
         }).join('');
 
@@ -3197,15 +3216,26 @@ async function loadContactPanel(patient) {
       renderPanel();
     });
 
+    panelWrap.querySelectorAll('.quick-schedule-from-ficha').forEach(btn => {
+      btn.addEventListener('click', () => {
+        pendingQuickSchedule = { internId: btn.dataset.internId, patientId: patient.id };
+        document.getElementById('patientFichaModal').style.display = 'none';
+        currentPage = 'agenda';
+        render();
+      });
+    });
+
     document.getElementById('copyContactTextBtn').addEventListener('click', async () => {
       const copyMsg = document.getElementById('contactPanelMsg');
       const matchingPool = sorted.filter(id => matchesPatient(id));
       const effectivePool = patientHasAvail && matchingPool.length > 0 ? matchingPool : sorted;
 
       const uniqueSlots = new Map();
+      const openSetForCopy = selectedLocationId ? openSlotsByLocation[selectedLocationId] : null;
       effectivePool.forEach(id => {
         (availByIntern[id] || []).forEach(a => {
           const key = `${a.weekday}_${a.start_time.slice(0, 5)}`;
+          if (openSetForCopy && !openSetForCopy.has(key)) return; // não anuncia horário que não existe nessa localização
           if (!uniqueSlots.has(key)) uniqueSlots.set(key, a);
         });
       });
@@ -4792,6 +4822,9 @@ async function renderAgenda() {
   const { data: allInternAvail } = internIds.length
     ? await db.from('intern_availability').select('*').in('intern_id', internIds)
     : { data: [] };
+  const { data: allRoomStaffing } = internIds.length
+    ? await db.from('room_staffing').select('*').in('intern_id', internIds)
+    : { data: [] };
   const patientIds = (patients || []).map(p => p.id);
   const { data: allPatientAvail } = patientIds.length
     ? await db.from('patient_availability').select('patient_id, weekday, start_time').in('patient_id', patientIds)
@@ -5437,6 +5470,24 @@ async function renderAgenda() {
       const match = candidates.find(c => c.weekday === pendingQuickSchedule.weekday && c.start_time.slice(0, 5) === pendingQuickSchedule.startTime.slice(0, 5));
       if (match) fSlot.value = `${match.weekday}|${match.start_time}|${match.end_time}`;
     }
+
+    autoFillRoomFromStaffing();
+  }
+
+  // Se o estagiário já está ensalado (Mapa de Salas) naquele dia/horário, sugere a sala
+  // automaticamente — mas não trava: a coordenação continua podendo trocar manualmente.
+  function autoFillRoomFromStaffing() {
+    if (apptMode !== 'estagiario') return;
+    const slotVal = fSlot.value;
+    const internId = fIntern.value;
+    if (!slotVal || !internId) return;
+    const [weekdayStr, startTime] = slotVal.split('|');
+    const weekday = parseInt(weekdayStr);
+    const match = (allRoomStaffing || []).find(s => s.intern_id === internId && s.weekday === weekday && s.start_time.slice(0, 5) === startTime.slice(0, 5));
+    if (match) {
+      const roomObj = (roomsList || []).find(r => r.id === match.room_id);
+      if (roomObj) document.getElementById('fRoom').value = roomObj.name;
+    }
   }
 
   // ---- Modo "Por sala" ----
@@ -5628,7 +5679,8 @@ async function renderAgenda() {
 
   fPatient.addEventListener('change', updateInternOptions);
   fIntern.addEventListener('change', updateSlotOptions);
-  [fSlot, fStartDate, fEndDate].forEach(el => el.addEventListener('change', calculatePreview));
+  fSlot.addEventListener('change', () => { autoFillRoomFromStaffing(); calculatePreview(); });
+  [fStartDate, fEndDate].forEach(el => el.addEventListener('change', calculatePreview));
   fSalaRoom.addEventListener('change', updateSalaSlotOptions);
   fSalaSlot.addEventListener('change', updateSalaPatientOptions);
   fSalaPatient.addEventListener('change', calculatePreview);
@@ -5637,9 +5689,26 @@ async function renderAgenda() {
     resetApptForm();
     panel.style.display = 'block';
     panel.scrollIntoView({ behavior: 'smooth' });
-    if (pendingQuickSchedule) {
-      // Paciente ainda precisa ser escolhido manualmente; estagiário e horário
-      // serão pré-marcados assim que o paciente for selecionado.
+    if (pendingQuickSchedule && pendingQuickSchedule.patientId) {
+      // Veio da Ficha do paciente: paciente e estagiário já eram conhecidos.
+      // Se o paciente ainda não está "Em contato" (ex.: veio de "Na espera"), ele
+      // não estará nas opções normais — adiciona ele na hora, sem mudar a regra geral.
+      if (!fPatient.querySelector(`option[value="${pendingQuickSchedule.patientId}"]`)) {
+        const { data: quickPatient } = await db.from('patients')
+          .select('id, registration_number, full_name').eq('id', pendingQuickSchedule.patientId).maybeSingle();
+        if (quickPatient) {
+          const opt = document.createElement('option');
+          opt.value = quickPatient.id;
+          opt.textContent = `#${quickPatient.registration_number} — ${quickPatient.full_name || 'Sem nome'}`;
+          fPatient.appendChild(opt);
+        }
+      }
+      fPatient.value = pendingQuickSchedule.patientId;
+      await updateInternOptions();
+      msg.textContent = 'Paciente e estagiário pré-selecionados a partir da Ficha. Escolha o dia e horário.';
+      msg.className = 'message success'; msg.style.display = 'block';
+    } else if (pendingQuickSchedule) {
+      // Veio da Grade Geral: só o estagiário e o horário eram conhecidos.
       msg.textContent = 'Selecione o paciente para concluir o agendamento rápido a partir da Grade Geral.';
       msg.className = 'message success'; msg.style.display = 'block';
     }
